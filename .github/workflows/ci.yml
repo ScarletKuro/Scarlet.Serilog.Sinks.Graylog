@@ -11,6 +11,7 @@ env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  TESTINGPLATFORM_TELEMETRY_OPTOUT: 1
   SOLUTION: scarlet-serilog-sinks-graylog.slnx
 
 jobs:
@@ -22,14 +23,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 6.0.x/8.0.x/10.0.x provide the runtimes the test projects target. The 10.0.x
+      # 8.0.x/10.0.x provide the runtimes the test projects target. The 10.0.x
       # SDK also builds the library's net9.0 and .NET Framework targets via targeting
       # packs, and is new enough to read the .slnx solution format.
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: |
-            6.0.x
             8.0.x
             10.0.x
 
@@ -47,9 +47,10 @@ jobs:
       - name: Test
         run: >
           dotnet test ${{ env.SOLUTION }} -c Release --no-restore
-          --filter "Category!=Integration"
-          --collect:"XPlat Code Coverage"
-          --logger "trx;LogFileName=test-results.trx"
+          --results-directory TestResults --
+          --filter-not-trait "Category=Integration"
+          --coverage --coverage-output-format cobertura
+          --report-trx --report-trx-filename "{asm}_{tfm}_{arch}.trx"
 
       - name: Upload test results
         if: always()
@@ -59,12 +60,12 @@ jobs:
           path: '**/TestResults/*.trx'
           if-no-files-found: ignore
 
-      # Coverlet writes one Cobertura report per target framework; gather the reports before upload.
+      # Microsoft Code Coverage writes one Cobertura report per target framework; gather them before upload.
       - name: Collect coverage reports
         if: always()
         run: |
           mkdir -p coverage
-          find tests -name 'coverage.cobertura.xml' -print0 | while IFS= read -r -d '' f; do
+          find . -name '*.cobertura.xml' -print0 | while IFS= read -r -d '' f; do
             cp "$f" "coverage/$(basename "$(dirname "$f")").$(basename "$f")"
           done
           ls -l coverage

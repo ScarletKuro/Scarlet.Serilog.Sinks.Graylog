@@ -1,9 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>net10.0;net8.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
     <SignAssembly>true</SignAssembly>
     <AssemblyOriginatorKeyFile>..\..\sign.snk</AssemblyOriginatorKeyFile>
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
   </PropertyGroup>
   <ItemGroup>
     <None Remove="Configurations\AppSettingsWithGraylogSinkContainingHostProperty.json" />
@@ -15,10 +18,11 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="7.0.0" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.6.3" />
-    <PackageReference Include="coverlet.collector" Version="6.0.4">
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.10.0">
       <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" Version="2.3.3">
+      <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Serilog.Exceptions" Version="8.4.0" />
     <PackageReference Include="Serilog.Settings.Configuration" Version="9.0.0" />
@@ -26,11 +30,7 @@
     <PackageReference Include="AutoFixture" Version="4.18.0" />
     <PackageReference Include="NSubstitute" Version="5.3.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
-    <PackageReference Include="xunit" Version="2.9.3" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
+    <PackageReference Include="xunit.v3.mtp-v2" Version="4.0.0" />
 
     <ProjectReference Include="..\..\src\Scarlet.Serilog.Sinks.Graylog\Scarlet.Serilog.Sinks.Graylog.csproj" />
   </ItemGroup>

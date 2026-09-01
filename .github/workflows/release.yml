@@ -19,6 +19,7 @@ env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  TESTINGPLATFORM_TELEMETRY_OPTOUT: 1
   SOLUTION: scarlet-serilog-sinks-graylog.slnx
 
 jobs:
@@ -36,7 +37,6 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: |
-            6.0.x
             8.0.x
             10.0.x
 
@@ -60,7 +60,7 @@ jobs:
       - name: Test
         run: >
           dotnet test ${{ env.SOLUTION }} -c Release --no-restore
-          --filter "Category!=Integration"
+          --filter-not-trait "Category=Integration"
 
       - name: Pack
         run: |
