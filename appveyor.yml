@@ -24,8 +24,8 @@
   image: Visual Studio 2022
 
   build_script:
-    - cmd: dotnet restore -v n  ./src/scarlet-serilog-sinks-graylog.sln
-    - cmd: dotnet build  -v n -c Debug ./src/scarlet-serilog-sinks-graylog.sln
+    - cmd: dotnet restore -v n  ./scarlet-serilog-sinks-graylog.slnx
+    - cmd: dotnet build  -v n -c Debug ./scarlet-serilog-sinks-graylog.slnx
     - cmd: dotnet pack -v n --include-symbols --include-source -o "./artifacts" --version-suffix Beta -p:SymbolPackageFormat=snupkg ./src/Scarlet.Serilog.Sinks.Graylog/Scarlet.Serilog.Sinks.Graylog.csproj
     - cmd: dotnet pack -v n --include-symbols --include-source -o "./artifacts" --version-suffix Beta -p:SymbolPackageFormat=snupkg ./src/Scarlet.Serilog.Sinks.Graylog.Batching/Scarlet.Serilog.Sinks.Graylog.Batching.csproj
 
@@ -60,8 +60,8 @@
     use_snupkg_format: true
 
   build_script:
-    - cmd: dotnet restore -v n  ./src/scarlet-serilog-sinks-graylog.sln
-    - cmd: dotnet build  -v n -c Release ./src/scarlet-serilog-sinks-graylog.sln
+    - cmd: dotnet restore -v n  ./scarlet-serilog-sinks-graylog.slnx
+    - cmd: dotnet build  -v n -c Release ./scarlet-serilog-sinks-graylog.slnx
     - cmd: dotnet pack -v n --include-symbols --include-source -o "./artifacts" -p:SymbolPackageFormat=snupkg ./src/Scarlet.Serilog.Sinks.Graylog/Scarlet.Serilog.Sinks.Graylog.csproj
     - cmd: dotnet pack -v n --include-symbols --include-source -o "./artifacts" -p:SymbolPackageFormat=snupkg ./src/Scarlet.Serilog.Sinks.Graylog.Batching/Scarlet.Serilog.Sinks.Graylog.Batching.csproj
   test:
