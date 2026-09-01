@@ -44,8 +44,6 @@ jobs:
         run: |
           dotnet pack src/Scarlet.Serilog.Sinks.Graylog/Scarlet.Serilog.Sinks.Graylog.csproj \
             -c Release --no-restore -o artifacts --include-symbols -p:SymbolPackageFormat=snupkg
-          dotnet pack src/Scarlet.Serilog.Sinks.Graylog.Batching/Scarlet.Serilog.Sinks.Graylog.Batching.csproj \
-            -c Release --no-restore -o artifacts --include-symbols -p:SymbolPackageFormat=snupkg
 
       - name: Test
         run: >

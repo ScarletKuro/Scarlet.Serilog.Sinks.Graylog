@@ -1,4 +1,3 @@
-using Serilog.Debugging;
 using Scarlet.Serilog.Sinks.Graylog.Core.Helpers;
 using System;
 using System.Net.Http;
@@ -71,10 +70,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
 
             HttpResponseMessage result = await _httpClient!.PostAsync(_defaultHttpUriPath, content).ConfigureAwait(false);
 
-            if (!result.IsSuccessStatusCode)
-            {
-                SelfLog.WriteLine("Unable send log message to graylog via HTTP transport");
-            }
+            // Throwing rather than swallowing is what lets Serilog's batching sink see the failure
+            // and retry the batch; the unbatched path reports it through GraylogSink.Emit's
+            // fault continuation.
+            result.EnsureSuccessStatusCode();
         }
 
         public void Dispose()

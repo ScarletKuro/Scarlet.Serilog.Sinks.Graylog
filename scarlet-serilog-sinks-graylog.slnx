@@ -6,7 +6,6 @@
   </Configurations>
   <Folder Name="/src/">
     <Project Path="src/Scarlet.Serilog.Sinks.Graylog/Scarlet.Serilog.Sinks.Graylog.csproj" />
-    <Project Path="src/Scarlet.Serilog.Sinks.Graylog.Batching/Scarlet.Serilog.Sinks.Graylog.Batching.csproj" />
     <Project Path="src/Scarlet.Serilog.Sinks.Graylog.Core/Scarlet.Serilog.Sinks.Graylog.Core.csproj" />
   </Folder>
   <Folder Name="/tests/">
