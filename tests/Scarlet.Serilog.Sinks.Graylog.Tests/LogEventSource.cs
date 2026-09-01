@@ -12,7 +12,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             var logEvent = new LogEvent(date, LogEventLevel.Information, null,
                 new MessageTemplate("abcdef{TestProp}", new List<MessageTemplateToken>
                 {
-                    new TextToken("abcdef", 0),
+                    new TextToken("abcdef"),
                     new PropertyToken("TestProp", "zxc", alignment:new Alignment(AlignmentDirection.Left, 3))
 
                 }), new List<LogEventProperty>
@@ -36,7 +36,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             var logEvent = new LogEvent(date, LogEventLevel.Information, null,
                 new MessageTemplate("abcdef{TestProp}", new List<MessageTemplateToken>
                 {
-                    new TextToken("abcdef", 0),
+                    new TextToken("abcdef"),
                     new PropertyToken("TestProp", "zxc", alignment:new Alignment(AlignmentDirection.Left, 3))
 
                 }), new List<LogEventProperty>

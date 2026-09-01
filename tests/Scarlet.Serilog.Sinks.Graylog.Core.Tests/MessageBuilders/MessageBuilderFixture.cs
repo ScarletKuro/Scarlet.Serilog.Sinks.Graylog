@@ -55,7 +55,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests.MessageBuilders
                 var logEvent = new LogEvent(DateTimeOffset.Now, LogEventLevel.Information, null,
                     new MessageTemplate("abcdef{TestProp}", new List<MessageTemplateToken>
                     {
-                        new TextToken("abcdef", 0),
+                        new TextToken("abcdef"),
                         new PropertyToken("TestProp", "zxc", alignment: new Alignment(AlignmentDirection.Left, 3))
 
                     }), new List<LogEventProperty>

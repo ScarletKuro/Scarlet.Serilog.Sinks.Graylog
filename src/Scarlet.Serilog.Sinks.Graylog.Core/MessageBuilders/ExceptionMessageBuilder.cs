@@ -25,11 +25,14 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
 
         public override JsonObject Build(LogEvent logEvent)
         {
-            Tuple<string, string?> excMessageTuple = GetExceptionMessages(logEvent.Exception);
+            // GelfConverter only routes to this builder when logEvent.Exception is non-null.
+            Exception exception = logEvent.Exception!;
+
+            Tuple<string, string?> excMessageTuple = GetExceptionMessages(exception);
             string exceptionDetail = excMessageTuple.Item1;
             string stackTrace = excMessageTuple.Item2!;
-            string source = logEvent.Exception.Source!;
-            string type = logEvent.Exception.GetType().FullName!;
+            string source = exception.Source!;
+            string type = exception.GetType().FullName!;
 
             logEvent.AddOrUpdateProperty(new LogEventProperty("ExceptionSource", new ScalarValue(source)));
             logEvent.AddOrUpdateProperty(new LogEventProperty("ExceptionType", new ScalarValue(type)));

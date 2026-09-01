@@ -45,6 +45,12 @@
         <None Include="sign.snk"/>
     </ItemGroup>
 
+    <!--Core is referenced with PrivateAssets="all" so its dependencies do not flow
+        into the package; Serilog has to be declared here to appear in the nuspec.-->
+    <ItemGroup>
+        <PackageReference Include="Serilog" Version="4.2.0"/>
+    </ItemGroup>
+
     <ItemGroup>
         <ProjectReference Include="..\Scarlet.Serilog.Sinks.Graylog.Core\Scarlet.Serilog.Sinks.Graylog.Core.csproj" PrivateAssets="all"/>
     </ItemGroup>

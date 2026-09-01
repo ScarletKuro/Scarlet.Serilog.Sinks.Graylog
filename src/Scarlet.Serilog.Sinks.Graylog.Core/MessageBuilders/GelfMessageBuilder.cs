@@ -157,7 +157,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
                         }
                     } else
                     {
-                        var dict = dictionaryValue.Elements.ToDictionary(k => k.Key.Value, v => RenderPropertyValue(v.Value));
+                        var dict = dictionaryValue.Elements.ToDictionary(k => k.Key.Value!, v => RenderPropertyValue(v.Value));
                         var stringDictionary = JsonSerializer.SerializeToNode(dict, Options.JsonSerializerOptions);
 
                         jObject.Add(key, stringDictionary);
