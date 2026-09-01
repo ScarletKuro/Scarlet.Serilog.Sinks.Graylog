@@ -1,5 +1,4 @@
 using AutoFixture;
-using FluentAssertions;
 using Scarlet.Serilog.Sinks.Graylog.Core.Helpers;
 using System;
 using System.Linq;
@@ -29,7 +28,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests.Helpers
             var actticks = BitConverter.ToInt64(actual, 0);
             var actdate = DateTime.FromBinary(actticks);
 
-            actdate.Should().BeCloseTo(time, TimeSpan.FromMilliseconds(200));
+            Assert.InRange(actdate, time - TimeSpan.FromMilliseconds(200), time + TimeSpan.FromMilliseconds(200));
         }
 
         [Fact]
@@ -44,7 +43,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests.Helpers
 
             var actual = target.GenerateMessageId(given);
 
-            actual.Should().BeEquivalentTo(expected);
+            Assert.Equal(expected, actual);
         }
 
         [Fact]

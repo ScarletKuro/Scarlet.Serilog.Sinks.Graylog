@@ -1,5 +1,4 @@
 using Serilog;
-using FluentAssertions;
 using Microsoft.Extensions.Configuration;
 using Serilog.Configuration;
 using Serilog.Events;
@@ -30,7 +29,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             });
 
             var logger = loggerConfig.CreateLogger();
-            logger.Should().NotBeNull();
+            Assert.NotNull(logger);
         }
 
         [Fact]
@@ -42,7 +41,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
                 LogEventLevel.Information);
 
             var logger = loggerConfig.CreateLogger();
-            logger.Should().NotBeNull();
+            Assert.NotNull(logger);
         }
 
         //[Fact(Skip="Integration test")]
@@ -77,7 +76,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             {
                 logger.Information("hello");
 
-                transport.Payloads.Should().ContainSingle("an unbatched sink writes as it emits");
+                Assert.Single(transport.Payloads);
             }
         }
 
@@ -96,10 +95,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             var logger = new LoggerConfiguration().WriteTo.Graylog(options).CreateLogger();
 
             logger.Information("hello");
-            transport.Payloads.Should().BeEmpty("the event should still be buffered");
+            Assert.Empty(transport.Payloads);
 
             logger.Dispose();
-            transport.Payloads.Should().ContainSingle("disposing the logger flushes the buffer");
+            Assert.Single(transport.Payloads);
         }
 
         [Fact]
@@ -116,9 +115,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
                             && m.GetParameters()[0].ParameterType == typeof(LoggerSinkConfiguration))
                 .ToList();
 
-            graylogMethods.Should().HaveCount(2, "one options overload and one convenience overload");
-            graylogMethods.Count(m => m.GetParameters().Length > 2)
-                .Should().Be(1, "there must be exactly one multi-parameter convenience overload");
+            Assert.Equal(2, graylogMethods.Count);
+            Assert.Equal(1, graylogMethods.Count(m => m.GetParameters().Length > 2));
         }
 
         [Fact]
@@ -136,7 +134,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
                 .ReadFrom.Configuration(configuration)
                 .CreateLogger();
 
-            logger.Should().NotBeNull();
+            Assert.NotNull(logger);
         }
 
         private static GraylogSinkOptions OptionsFor(ITransport transport)

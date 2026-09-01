@@ -37,7 +37,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests.MessageBuilders
 
             //JObject obj = exceptionBuilder.Build(logEvent);
 
-            //obj.Should().NotBeNull();
+            //Assert.NotNull(obj);
         }
     }
 }

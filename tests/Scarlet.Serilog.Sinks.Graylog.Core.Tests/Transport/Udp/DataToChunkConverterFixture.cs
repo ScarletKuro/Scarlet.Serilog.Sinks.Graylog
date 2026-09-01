@@ -1,5 +1,4 @@
 using AutoFixture;
-using FluentAssertions;
 using Moq;
 using Scarlet.Serilog.Sinks.Graylog.Core.Helpers;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp;
@@ -36,7 +35,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests.Transport.Udp
                 giwenData
             };
 
-            actual.Should().BeEquivalentTo(expected);
+            Assert.Equal(expected, actual);
         }
 
         [Fact]
@@ -72,10 +71,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests.Transport.Udp
 
             for (int i = 0; i < actual.Count; i++)
             {
-                actual[i].Take(2).ToArray().Should().BeEquivalentTo(new[] { 0x1e, 0x0f });
-                actual[i].Skip(2).Take(8).ToArray().Should().BeEquivalentTo(messageId);
-                actual[i].Skip(10).Take(1).First().Should().Be((byte)i);
-                actual[i].Skip(11).Take(1).First().Should().Be(13);
+                Assert.Equal(new byte[] { 0x1e, 0x0f }, actual[i].Take(2).ToArray());
+                Assert.Equal(messageId, actual[i].Skip(2).Take(8).ToArray());
+                Assert.Equal((byte)i, actual[i].Skip(10).First());
+                Assert.Equal(13, actual[i].Skip(11).First());
                 Assert.True(actual[i].Skip(12).All(c => c == 0));
             }
         }

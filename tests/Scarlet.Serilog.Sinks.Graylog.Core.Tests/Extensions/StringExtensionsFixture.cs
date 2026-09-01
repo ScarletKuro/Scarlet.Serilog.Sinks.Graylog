@@ -1,4 +1,3 @@
-using FluentAssertions;
 using Scarlet.Serilog.Sinks.Graylog.Core.Extensions;
 using Xunit;
 
@@ -16,7 +15,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests.Extensions
             };
 
             byte[] actual = giwen.ToGzip();
-            actual.Should().BeEquivalentTo(expected);
+            Assert.Equal(expected, actual);
         }
 
         [Theory]
@@ -27,7 +26,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests.Extensions
         {
             var actual = given.Truncate(length);
 
-            actual.Should().BeEquivalentTo(expected);
+            Assert.Equal(expected, actual);
         }
     }
 }

@@ -1,6 +1,5 @@
 #nullable enable
 
-using FluentAssertions;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 using Scarlet.Serilog.Sinks.Graylog.Tests.Fakes;
 using Serilog.Configuration;
@@ -50,7 +49,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
 
             await sink.EmitBatchAsync(Events(3));
 
-            transport.Payloads.Should().HaveCount(3);
+            Assert.Equal(3, transport.Payloads.Count);
         }
 
         [Fact]
@@ -62,7 +61,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
 
             await sink.EmitBatchAsync(Events(5));
 
-            transport.MaxObservedConcurrency.Should().Be(1);
+            Assert.Equal(1, transport.MaxObservedConcurrency);
         }
 
         [Fact]
@@ -74,7 +73,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
 
             Func<Task> act = () => sink.EmitBatchAsync(Events(1));
 
-            await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("boom");
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(act);
+            Assert.Equal("boom", exception.Message);
         }
 
         [Fact]
@@ -84,8 +84,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             var transport = new RecordingTransport(_ => Task.FromException(new InvalidOperationException("boom")));
             using var sink = new GraylogSink(OptionsFor(transport));
 
-            sink.Invoking(s => s.Emit(LogEventSource.GetSimpleLogEvent(DateTimeOffset.Now)))
-                .Should().NotThrow();
+            var exception = Record.Exception(() => sink.Emit(LogEventSource.GetSimpleLogEvent(DateTimeOffset.Now)));
+            Assert.Null(exception);
         }
 
         [Fact]
@@ -99,7 +99,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
                 await sink.EmitBatchAsync(Events(1));
             }
 
-            compact.Payloads.Should().ContainSingle().Which.Should().NotContain("\n");
+            Assert.DoesNotContain("\n", Assert.Single(compact.Payloads));
 
             var indented = new RecordingTransport();
             using (var sink = new GraylogSink(OptionsFor(indented, o => o.JsonSerializerOptions = new JsonSerializerOptions { WriteIndented = true })))
@@ -107,7 +107,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
                 await sink.EmitBatchAsync(Events(1));
             }
 
-            indented.Payloads.Should().ContainSingle().Which.Should().Contain("\n");
+            Assert.Contains("\n", Assert.Single(indented.Payloads));
         }
 
         [Fact]
@@ -120,7 +120,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
 
             await sink.OnEmptyBatchAsync();
 
-            transport.Payloads.Should().BeEmpty();
+            Assert.Empty(transport.Payloads);
         }
 
         [Fact]
@@ -137,8 +137,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
 
             sink.Dispose();
 
-            created.Should().Be(0);
-            transport.DisposeCount.Should().Be(0);
+            Assert.Equal(0, created);
+            Assert.Equal(0, transport.DisposeCount);
         }
 
         [Fact]
@@ -152,7 +152,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             sink.Dispose();
             sink.Dispose();
 
-            transport.DisposeCount.Should().Be(1);
+            Assert.Equal(1, transport.DisposeCount);
         }
 
         [Fact]
@@ -161,8 +161,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             var transport = new RecordingTransport();
             using var sink = new GraylogSink(OptionsFor(transport));
 
-            sink.Should().BeAssignableTo<ILogEventSink>();
-            sink.Should().BeAssignableTo<IBatchedLogEventSink>();
+            Assert.IsAssignableFrom<ILogEventSink>(sink);
+            Assert.IsAssignableFrom<IBatchedLogEventSink>(sink);
         }
 
         [Theory]
@@ -182,10 +182,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
 
             if (expectBatching)
             {
-                result.Should().NotBeNull();
+                Assert.NotNull(result);
             } else
             {
-                result.Should().BeNull();
+                Assert.Null(result);
             }
         }
 
@@ -194,12 +194,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         {
             var result = (BatchingOptions?)InvokeBuildBatchingOptions(true, 500, TimeSpan.FromSeconds(7), 4242, TimeSpan.FromMinutes(3), false);
 
-            result.Should().NotBeNull();
-            result!.BatchSizeLimit.Should().Be(500);
-            result.BufferingTimeLimit.Should().Be(TimeSpan.FromSeconds(7));
-            result.QueueLimit.Should().Be(4242);
-            result.RetryTimeLimit.Should().Be(TimeSpan.FromMinutes(3));
-            result.EagerlyEmitFirstEvent.Should().BeFalse();
+            Assert.NotNull(result);
+            Assert.Equal(500, result!.BatchSizeLimit);
+            Assert.Equal(TimeSpan.FromSeconds(7), result.BufferingTimeLimit);
+            Assert.Equal(4242, result.QueueLimit);
+            Assert.Equal(TimeSpan.FromMinutes(3), result.RetryTimeLimit);
+            Assert.False(result.EagerlyEmitFirstEvent);
         }
 
         [Fact]
@@ -208,12 +208,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             var result = (BatchingOptions?)InvokeBuildBatchingOptions(true, null, null, null, null, null);
             var defaults = new BatchingOptions();
 
-            result.Should().NotBeNull();
-            result!.BatchSizeLimit.Should().Be(defaults.BatchSizeLimit);
-            result.BufferingTimeLimit.Should().Be(defaults.BufferingTimeLimit);
-            result.QueueLimit.Should().Be(defaults.QueueLimit);
-            result.RetryTimeLimit.Should().Be(defaults.RetryTimeLimit);
-            result.EagerlyEmitFirstEvent.Should().Be(defaults.EagerlyEmitFirstEvent);
+            Assert.NotNull(result);
+            Assert.Equal(defaults.BatchSizeLimit, result!.BatchSizeLimit);
+            Assert.Equal(defaults.BufferingTimeLimit, result.BufferingTimeLimit);
+            Assert.Equal(defaults.QueueLimit, result.QueueLimit);
+            Assert.Equal(defaults.RetryTimeLimit, result.RetryTimeLimit);
+            Assert.Equal(defaults.EagerlyEmitFirstEvent, result.EagerlyEmitFirstEvent);
         }
 
         [Fact]
@@ -223,8 +223,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             // parameter cannot otherwise express.
             var result = (BatchingOptions?)InvokeBuildBatchingOptions(null, null, null, 0, null, null);
 
-            result.Should().NotBeNull();
-            result!.QueueLimit.Should().BeNull();
+            Assert.NotNull(result);
+            Assert.Null(result!.QueueLimit);
         }
 
         /// <summary>
@@ -242,7 +242,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             var method = typeof(LoggerConfigurationGrayLogExtensions)
                 .GetMethod("BuildBatchingOptions", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
 
-            method.Should().NotBeNull("LoggerConfigurationGrayLogExtensions.BuildBatchingOptions should exist");
+            Assert.NotNull(method);
 
             return method!.Invoke(null, new object?[]
             {
