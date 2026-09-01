@@ -21,7 +21,6 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
 
             LogEvent logEvent = LogEventSource.GetComplexEvent(date);
 
-            //string actual = target.Build(logEvent).ToString(Newtonsoft.Json.Formatting.None);
         }
 
         [Fact]

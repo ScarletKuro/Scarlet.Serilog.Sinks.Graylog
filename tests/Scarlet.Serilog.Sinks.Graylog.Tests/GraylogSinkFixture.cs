@@ -1,11 +1,11 @@
 using NSubstitute;
-using Newtonsoft.Json.Linq;
 using Serilog.Events;
 using Serilog.Parsing;
 using Scarlet.Serilog.Sinks.Graylog.Core;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -31,8 +31,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             var logEvent = new LogEvent(DateTimeOffset.Now, LogEventLevel.Fatal, null,
                 new MessageTemplate("O_o", new List<MessageTemplateToken>()), new List<LogEventProperty>());
 
-            var jObject = new JObject();
-            transport.Send(jObject.ToString(Newtonsoft.Json.Formatting.None)).Returns(Task.CompletedTask);
+            transport.Send(JsonSerializer.Serialize(new { })).Returns(Task.CompletedTask);
 
 
             //gelfConverter.GetGelfJson(logEvent).Returns(jObject);

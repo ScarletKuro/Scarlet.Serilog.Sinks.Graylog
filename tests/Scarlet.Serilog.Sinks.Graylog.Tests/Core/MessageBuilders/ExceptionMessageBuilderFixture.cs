@@ -35,7 +35,6 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
             DateTimeOffset date = DateTimeOffset.Now;
             LogEvent logEvent = LogEventSource.GetExceptionLogEvent(date, testExc);
 
-            //JObject obj = exceptionBuilder.Build(logEvent);
 
             //Assert.NotNull(obj);
         }
