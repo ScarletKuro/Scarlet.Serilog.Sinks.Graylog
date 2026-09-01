@@ -1,0 +1,92 @@
+name: Release
+
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Package version override (blank = use the <Version> in each .csproj)'
+        required: false
+        type: string
+      dry_run:
+        description: 'Build and pack, but do not push to nuget.org'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  SOLUTION: scarlet-serilog-sinks-graylog.slnx
+
+jobs:
+  publish:
+    name: Pack & publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            6.0.x
+            7.0.x
+            9.0.x
+
+      # A tag only triggers the release; the version still comes from the csproj
+      # files unless explicitly overridden via workflow_dispatch.
+      - name: Resolve version argument
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "arg=-p:Version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "arg=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Restore
+        run: dotnet restore ${{ env.SOLUTION }}
+
+      - name: Build
+        run: dotnet build ${{ env.SOLUTION }} -c Release --no-restore ${{ steps.version.outputs.arg }}
+
+      - name: Test
+        run: >
+          dotnet test ${{ env.SOLUTION }} -c Release --no-restore
+          --filter "Category!=Integration"
+
+      - name: Pack
+        run: |
+          dotnet pack src/Scarlet.Serilog.Sinks.Graylog/Scarlet.Serilog.Sinks.Graylog.csproj \
+            -c Release --no-restore -o artifacts --include-symbols -p:SymbolPackageFormat=snupkg ${{ steps.version.outputs.arg }}
+          dotnet pack src/Scarlet.Serilog.Sinks.Graylog.Batching/Scarlet.Serilog.Sinks.Graylog.Batching.csproj \
+            -c Release --no-restore -o artifacts --include-symbols -p:SymbolPackageFormat=snupkg ${{ steps.version.outputs.arg }}
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: |
+            artifacts/*.nupkg
+            artifacts/*.snupkg
+
+      - name: Push to nuget.org
+        if: ${{ !inputs.dry_run }}
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if [ -z "$NUGET_API_KEY" ]; then
+            echo "::error::NUGET_API_KEY secret is not set."
+            exit 1
+          fi
+          dotnet nuget push "artifacts/*.nupkg" \
+            --source https://api.nuget.org/v3/index.json \
+            --api-key "$NUGET_API_KEY" \
+            --skip-duplicate

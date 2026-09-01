@@ -4,6 +4,8 @@ A maintained fork of [Serilog.Sinks.Graylog](https://github.com/whir1/serilog-si
 
 ## Status
 
+[![CI](https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/actions/workflows/ci.yml/badge.svg)](https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/actions/workflows/ci.yml)
+
 ### Scarlet.Serilog.Sinks.Graylog
 
 [![NuGet](https://img.shields.io/nuget/v/Scarlet.Serilog.Sinks.Graylog.svg)](https://www.nuget.org/packages/Scarlet.Serilog.Sinks.Graylog/)

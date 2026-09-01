@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  SOLUTION: scarlet-serilog-sinks-graylog.slnx
+
+jobs:
+  build:
+    name: Build & test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 6.0.x and 7.0.x provide the runtimes the test projects target;
+      # 9.0.x provides a CLI new enough to read the .slnx solution format.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            6.0.x
+            7.0.x
+            9.0.x
+
+      - name: Restore
+        run: dotnet restore ${{ env.SOLUTION }}
+
+      - name: Build
+        run: dotnet build ${{ env.SOLUTION }} -c Release --no-restore
+
+      # Packed before the test step so the packages are built from uninstrumented
+      # binaries -- AltCover rewrites assemblies in the test output during build.
+      - name: Pack
+        run: |
+          dotnet pack src/Scarlet.Serilog.Sinks.Graylog/Scarlet.Serilog.Sinks.Graylog.csproj \
+            -c Release --no-restore -o artifacts --include-symbols -p:SymbolPackageFormat=snupkg
+          dotnet pack src/Scarlet.Serilog.Sinks.Graylog.Batching/Scarlet.Serilog.Sinks.Graylog.Batching.csproj \
+            -c Release --no-restore -o artifacts --include-symbols -p:SymbolPackageFormat=snupkg
+
+      - name: Test
+        run: >
+          dotnet test ${{ env.SOLUTION }} -c Release --no-restore
+          --filter "Category!=Integration"
+          -p:AltCover=true
+          --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: '**/TestResults/*.trx'
+          if-no-files-found: ignore
+
+      # AltCover writes one report per target framework (coverage.net6.0.xml,
+      # coverage.net7.0.xml), and both test projects use the same file names, so
+      # they are gathered under project-qualified names before upload.
+      - name: Collect coverage reports
+        if: always()
+        run: |
+          mkdir -p coverage
+          find src -name 'coverage.*.xml' -print0 | while IFS= read -r -d '' f; do
+            cp "$f" "coverage/$(basename "$(dirname "$f")").$(basename "$f")"
+          done
+          ls -l coverage
+
+      - name: Upload coverage to Codecov
+        if: always()
+        uses: codecov/codecov-action@v5
+        with:
+          directory: ./coverage
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: |
+            artifacts/*.nupkg
+            artifacts/*.snupkg
