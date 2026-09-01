@@ -1,11 +1,9 @@
-﻿<Project Sdk="Microsoft.NET.Sdk" ToolsVersion="15.0">
+﻿<Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <LangVersion>11.0</LangVersion>
     </PropertyGroup>
     <PropertyGroup>
         <TargetFrameworks>net10.0;net9.0;net8.0;net6.0;net471;net462;netstandard2.0</TargetFrameworks>
-        <RestorePackages>true</RestorePackages>
-        <DebugType>full</DebugType>
         <Nullable>enable</Nullable>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
         <WarningsAsErrors/>
@@ -14,38 +12,26 @@
         <Authors>ScarletKuro, Anton Volkov and Contributors</Authors>
         <Description>Community-maintained fork of Serilog.Sinks.Graylog. The Serilog Graylog Sink project is a sink (basically a writer) for the Serilog logging framework. Structured log events are written to sinks and each sink is responsible for writing it to its own backend, database, store etc. This sink delivers the data to Graylog2, a NoSQL search engine. Optional batching, built on Serilog's own batching support, is included in this package - the separate Serilog.Sinks.Graylog.Batching package is no longer needed.</Description>
 
-        <PackageProjectUrl>https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog</PackageProjectUrl>
-        <RepositoryUrl>https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog.git</RepositoryUrl>
+        <RepositoryUrl>https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog</RepositoryUrl>
         <PackageIcon>serilog-sink-nuget.png</PackageIcon>
 
-        <RepositoryType>git</RepositoryType>
         <PackageTags>Serilog Sink Graylog Batching Scarlet</PackageTags>
         <Copyright>Copyright © Anton Volkov and Contributors; fork maintained by ScarletKuro</Copyright>
         <NeutralLanguage>en</NeutralLanguage>
 
         <Version>4.0.0</Version>
         <AssemblyVersion>4.0.0.0</AssemblyVersion>
-        <FileVersion>4.0.0.0</FileVersion>
         <SignAssembly>true</SignAssembly>
 
         <AssemblyOriginatorKeyFile>..\..\sign.snk</AssemblyOriginatorKeyFile>
         <AssemblySignPublicKey>0024000004800000940000000602000000240000525341310004000001000100150475100d4074498f92b2e076cd16a1745c62a5f3a40a2fdff5210476b7f01952251b2967306c881b514b625292fe66325e773fe6cbbf509c4014c70bbfd47cf2b52a81f50c663ae5999ed429367bd1f54f9841c86ee87a6b78b1873aa203d956e77d1b47918312dff152d7f71e24d2896dd9026a2e126375714bedd53cbc9f</AssemblySignPublicKey>
 
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
-        <PackageReleaseNotes>
-            Batching is now part of this package; Scarlet.Serilog.Sinks.Graylog.Batching is discontinued and the dependency on Serilog.Sinks.PeriodicBatching is gone. Set GraylogSinkOptions.Batching, or pass any of the batched/batchSizeLimit/bufferingTimeLimit/queueLimit/retryTimeLimit/eagerlyEmitFirstEvent arguments, to buffer events using Serilog's built-in batching. WriteTo.Graylog(...) without those arguments stays unbatched, as before. A batched logger must be disposed or flushed with Log.CloseAndFlush() or the tail of the buffer is lost at shutdown.
-            Batching defaults now follow Serilog: BatchSizeLimit 1000 (was 10), buffering 2s (was 1s), QueueLimit 100000 (was 10 or 1000). The old batching sink's `period` argument is now `bufferingTimeLimit`, which is a maximum delay rather than a fixed tick.
-            Fixes: the batched path now honours JsonSerializerOptions (it previously always sent indented JSON), disposes its transport, and sends events sequentially so concurrent writes can no longer interleave TCP GELF frames. HTTP transport now throws on a non-success status code so failed batches are retried instead of silently dropped.
-        </PackageReleaseNotes>
-
-
     </PropertyGroup>
     <ItemGroup>
-        <EmbeddedResource Include="**\*.resx"/>
         <InternalsVisibleTo Include="Scarlet.Serilog.Sinks.Graylog.Tests, PublicKey=$(AssemblySignPublicKey)" />
 
         <None Include="..\serilog-sink-nuget.png" Pack="true" Visible="false" PackagePath=""/>
-        <None Remove="*.ncrunchproject"/>
     </ItemGroup>
 
     <ItemGroup>
