@@ -1,16 +1,28 @@
-# Status
+# Scarlet.Serilog.Sinks.Graylog
 
-[![Build status](https://ci.appveyor.com/api/projects/status/yqi7f32mxrwtnrvv/branch/master?svg=true)](https://ci.appveyor.com/project/whir1/serilog-sinks-graylog-j9flc/branch/master)
+A maintained fork of [Serilog.Sinks.Graylog](https://github.com/whir1/serilog-sinks-graylog) by Anton Volkov, which has not received updates for a long time.
 
-### serilog-sinks-graylog
+## Status
 
-[![NuGet](https://img.shields.io/nuget/v/serilog.sinks.graylog.svg)](https://www.nuget.org/packages/serilog.sinks.graylog/)
-[![Downloads](https://img.shields.io/nuget/dt/serilog.sinks.graylog.svg)](https://www.nuget.org/packages/serilog.sinks.graylog/)
+### Scarlet.Serilog.Sinks.Graylog
 
-### serilog-sinks-graylog-Batching
+[![NuGet](https://img.shields.io/nuget/v/Scarlet.Serilog.Sinks.Graylog.svg)](https://www.nuget.org/packages/Scarlet.Serilog.Sinks.Graylog/)
+[![Downloads](https://img.shields.io/nuget/dt/Scarlet.Serilog.Sinks.Graylog.svg)](https://www.nuget.org/packages/Scarlet.Serilog.Sinks.Graylog/)
 
-[![NuGet](https://img.shields.io/nuget/v/serilog.sinks.graylog.batching.svg)](https://www.nuget.org/packages/Serilog.Sinks.Graylog.Batching/)
-[![Downloads](https://img.shields.io/nuget/dt/serilog.sinks.graylog.batching.svg)](https://www.nuget.org/packages/Serilog.Sinks.Graylog.Batching/)
+### Scarlet.Serilog.Sinks.Graylog.Batching
+
+[![NuGet](https://img.shields.io/nuget/v/Scarlet.Serilog.Sinks.Graylog.Batching.svg)](https://www.nuget.org/packages/Scarlet.Serilog.Sinks.Graylog.Batching/)
+[![Downloads](https://img.shields.io/nuget/dt/Scarlet.Serilog.Sinks.Graylog.Batching.svg)](https://www.nuget.org/packages/Scarlet.Serilog.Sinks.Graylog.Batching/)
+
+## Migrating from Serilog.Sinks.Graylog
+
+The package IDs, assembly names and root namespace all gained a `Scarlet.` prefix. To migrate:
+
+1. Replace the `Serilog.Sinks.Graylog` / `Serilog.Sinks.Graylog.Batching` package references with `Scarlet.Serilog.Sinks.Graylog` / `Scarlet.Serilog.Sinks.Graylog.Batching`.
+2. Update `using Serilog.Sinks.Graylog...;` to `using Scarlet.Serilog.Sinks.Graylog...;`.
+3. Update the `Using` array in `appsettings.json` to `"Scarlet.Serilog.Sinks.Graylog"`.
+
+The API itself is unchanged — `WriteTo.Graylog(...)`, `GraylogSinkOptions` and the transports all keep their names.
 
 ## What is this sink ?
 The Serilog Graylog sink project is a sink (basically a writer) for the Serilog logging framework. Structured log events are written to sinks and each sink is responsible for writing it to its own backend, database, store etc. This sink delivers the data to Graylog2, a NoSQL search engine.
@@ -18,10 +30,13 @@ The Serilog Graylog sink project is a sink (basically a writer) for the Serilog 
 ## Quick start
 
 ```powershell
-Install-Package serilog.sinks.graylog
+Install-Package Scarlet.Serilog.Sinks.Graylog
 ```
 Register the sink in code.
 ```csharp
+using Scarlet.Serilog.Sinks.Graylog;
+using Scarlet.Serilog.Sinks.Graylog.Core;
+
 var loggerConfig = new LoggerConfiguration()
     .WriteTo.Graylog(new GraylogSinkOptions
       {
@@ -34,7 +49,7 @@ var loggerConfig = new LoggerConfiguration()
 ```json
 {
   "Serilog": {
-    "Using": ["Serilog.Sinks.Graylog"],
+    "Using": ["Scarlet.Serilog.Sinks.Graylog"],
     "MinimumLevel": "Debug",
     "WriteTo": [
     {
@@ -63,10 +78,10 @@ new GraylogSinkOptions
       }
 ```
 
-All options you can see at https://github.com/whir1/serilog-sinks-graylog/blob/master/src/Serilog.Sinks.Graylog.Core/GraylogSinkOptions.cs
+All options you can see at https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/blob/master/src/Scarlet.Serilog.Sinks.Graylog.Core/GraylogSinkOptions.cs
 
 You can create your own implementation of transports or converter and set it to options. But maybe i'll delete this feature in the future
 
-PS this is my first package XD.
+## Credits
 
-PPS I am sorry for my language, but my second language is C#
+Originally written by [Anton Volkov](https://github.com/whir1) and contributors. Licensed under the MIT License.

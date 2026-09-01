@@ -24,10 +24,10 @@
   image: Visual Studio 2022
 
   build_script:
-    - cmd: dotnet restore -v n  ./src/serilog-sinks-graylog.sln
-    - cmd: dotnet build  -v n -c Debug ./src/serilog-sinks-graylog.sln
-    - cmd: dotnet pack -v n --include-symbols --include-source -o "./artifacts" --version-suffix Beta -p:SymbolPackageFormat=snupkg ./src/Serilog.Sinks.Graylog/Serilog.Sinks.Graylog.csproj
-    - cmd: dotnet pack -v n --include-symbols --include-source -o "./artifacts" --version-suffix Beta -p:SymbolPackageFormat=snupkg ./src/Serilog.Sinks.Graylog.Batching/Serilog.Sinks.Graylog.Batching.csproj
+    - cmd: dotnet restore -v n  ./src/scarlet-serilog-sinks-graylog.sln
+    - cmd: dotnet build  -v n -c Debug ./src/scarlet-serilog-sinks-graylog.sln
+    - cmd: dotnet pack -v n --include-symbols --include-source -o "./artifacts" --version-suffix Beta -p:SymbolPackageFormat=snupkg ./src/Scarlet.Serilog.Sinks.Graylog/Scarlet.Serilog.Sinks.Graylog.csproj
+    - cmd: dotnet pack -v n --include-symbols --include-source -o "./artifacts" --version-suffix Beta -p:SymbolPackageFormat=snupkg ./src/Scarlet.Serilog.Sinks.Graylog.Batching/Scarlet.Serilog.Sinks.Graylog.Batching.csproj
 
   test:
     categories:
@@ -35,14 +35,14 @@
         - Integration
 
   test_script:
-    - dotnet test ./src/Serilog.Sinks.Graylog.Core.Tests --filter Category!=Integration /p:AltCover=true
-    - dotnet test ./src/Serilog.Sinks.Graylog.Tests --filter Category!=Integration /p:AltCover=true
+    - dotnet test ./src/Scarlet.Serilog.Sinks.Graylog.Core.Tests --filter Category!=Integration /p:AltCover=true
+    - dotnet test ./src/Scarlet.Serilog.Sinks.Graylog.Tests --filter Category!=Integration /p:AltCover=true
 
   after_test:
     - "SET PATH=C:\\Python34;C:\\Python34\\Scripts;%PATH%"
     - pip install codecov
-    - codecov -f "./src/Serilog.Sinks.Graylog.Core.Tests/coverage.xml" -t cd3f1ab1-60c6-4848-824b-466b93321d96
-    - codecov -f "./src/Serilog.Sinks.Graylog.Tests/coverage.xml" -t cd3f1ab1-60c6-4848-824b-466b93321d96
+    - codecov -f "./src/Scarlet.Serilog.Sinks.Graylog.Core.Tests/coverage.xml" -t cd3f1ab1-60c6-4848-824b-466b93321d96
+    - codecov -f "./src/Scarlet.Serilog.Sinks.Graylog.Tests/coverage.xml" -t cd3f1ab1-60c6-4848-824b-466b93321d96
   
   artifacts:
     - path: "./artifacts/*.*"
@@ -60,10 +60,10 @@
     use_snupkg_format: true
 
   build_script:
-    - cmd: dotnet restore -v n  ./src/serilog-sinks-graylog.sln
-    - cmd: dotnet build  -v n -c Release ./src/serilog-sinks-graylog.sln
-    - cmd: dotnet pack -v n --include-symbols --include-source -o "./artifacts" -p:SymbolPackageFormat=snupkg ./src/Serilog.Sinks.Graylog/Serilog.Sinks.Graylog.csproj
-    - cmd: dotnet pack -v n --include-symbols --include-source -o "./artifacts" -p:SymbolPackageFormat=snupkg ./src/Serilog.Sinks.Graylog.Batching/Serilog.Sinks.Graylog.Batching.csproj
+    - cmd: dotnet restore -v n  ./src/scarlet-serilog-sinks-graylog.sln
+    - cmd: dotnet build  -v n -c Release ./src/scarlet-serilog-sinks-graylog.sln
+    - cmd: dotnet pack -v n --include-symbols --include-source -o "./artifacts" -p:SymbolPackageFormat=snupkg ./src/Scarlet.Serilog.Sinks.Graylog/Scarlet.Serilog.Sinks.Graylog.csproj
+    - cmd: dotnet pack -v n --include-symbols --include-source -o "./artifacts" -p:SymbolPackageFormat=snupkg ./src/Scarlet.Serilog.Sinks.Graylog.Batching/Scarlet.Serilog.Sinks.Graylog.Batching.csproj
   test:
     categories:
       except:
