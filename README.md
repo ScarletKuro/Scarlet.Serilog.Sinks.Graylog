@@ -95,10 +95,9 @@ new GraylogSinkOptions
 ```
 
 All options you can see at
-[`Core/GraylogSinkOptions.cs`](https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/blob/master/src/Scarlet.Serilog.Sinks.Graylog.Core/GraylogSinkOptions.cs)
-and
 [`GraylogSinkOptions.cs`](https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/blob/master/src/Scarlet.Serilog.Sinks.Graylog/GraylogSinkOptions.cs)
-(which adds `Batching`).
+(which adds `Batching`) and its base
+[`Core/GraylogSinkOptions.cs`](https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/blob/master/src/Scarlet.Serilog.Sinks.Graylog/Core/GraylogSinkOptions.cs).
 
 You can create your own implementation of transports or converter and set it to options. But maybe i'll delete this feature in the future
 
