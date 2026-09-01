@@ -39,8 +39,6 @@ jobs:
       - name: Build
         run: dotnet build ${{ env.SOLUTION }} -c Release --no-restore
 
-      # Packed before the test step so the packages are built from uninstrumented
-      # binaries -- AltCover rewrites assemblies in the test output during build.
       - name: Pack
         run: |
           dotnet pack src/Scarlet.Serilog.Sinks.Graylog/Scarlet.Serilog.Sinks.Graylog.csproj \
@@ -50,7 +48,7 @@ jobs:
         run: >
           dotnet test ${{ env.SOLUTION }} -c Release --no-restore
           --filter "Category!=Integration"
-          -p:AltCover=true
+          --collect:"XPlat Code Coverage"
           --logger "trx;LogFileName=test-results.trx"
 
       - name: Upload test results
@@ -61,14 +59,13 @@ jobs:
           path: '**/TestResults/*.trx'
           if-no-files-found: ignore
 
-      # AltCover writes one report per target framework (coverage.net6.0.xml,
-      # coverage.net8.0.xml, ...), and both test projects use the same file names, so
-      # they are gathered under project-qualified names before upload.
+      # Coverlet writes one Cobertura report per target framework. Both test projects
+      # use the same file name, so gather them under project-qualified names before upload.
       - name: Collect coverage reports
         if: always()
         run: |
           mkdir -p coverage
-          find tests -name 'coverage.*.xml' -print0 | while IFS= read -r -d '' f; do
+          find tests -name 'coverage.cobertura.xml' -print0 | while IFS= read -r -d '' f; do
             cp "$f" "coverage/$(basename "$(dirname "$f")").$(basename "$f")"
           done
           ls -l coverage
