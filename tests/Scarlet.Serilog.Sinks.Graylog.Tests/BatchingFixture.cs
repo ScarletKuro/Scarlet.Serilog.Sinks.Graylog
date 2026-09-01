@@ -114,7 +114,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         public async Task OnEmptyBatchAsync_Completes()
         {
             // Serilog only supplies a default implementation of this on net6.0+, so netstandard2.0
-            // needs our own body; this is the canary for it.
+            // and .NET Framework need our own body; this is the canary for it.
             var transport = new RecordingTransport();
             using var sink = new GraylogSink(OptionsFor(transport));
 

@@ -90,7 +90,7 @@ namespace Scarlet.Serilog.Sinks.Graylog
         /// <inheritdoc />
         /// <remarks>
         /// Serilog only supplies a default implementation of this member on net6.0 and later, so the
-        /// netstandard2.0 build requires an explicit body.
+        /// netstandard2.0 and .NET Framework builds require an explicit body.
         /// </remarks>
         public Task OnEmptyBatchAsync()
         {

@@ -33,7 +33,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
         {
             await EnsureConnection().ConfigureAwait(false);
 
-#if NETSTANDARD2_0
+#if !NET
             await _stream!.WriteAsync(payload, 0, payload.Length).ConfigureAwait(false);
 #else
             await _stream!.WriteAsync(payload).ConfigureAwait(false);

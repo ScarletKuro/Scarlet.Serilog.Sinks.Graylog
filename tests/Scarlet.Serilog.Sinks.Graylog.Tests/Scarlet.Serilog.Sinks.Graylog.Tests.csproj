@@ -1,7 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk" ToolsVersion="15.0">
   <PropertyGroup>
-    <TargetFrameworks>net7.0;net6.0</TargetFrameworks>
+    <TargetFrameworks>net10.0;net8.0;net6.0</TargetFrameworks>
     <DebugType>full</DebugType>
+    <!--Test-only dependencies (Serilog.Settings.Configuration 9.x and its Microsoft.Extensions.*
+         transitives) warn that they are untested on net6.0. The library itself ships net6.0,
+         so we keep testing it there.-->
+    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
   </PropertyGroup>
   <ItemGroup>
     <None Remove="Configurations\AppSettingsWithGraylogSinkContainingHostProperty.json" />
@@ -18,7 +22,6 @@
     <PackageReference Include="Serilog.Exceptions" Version="8.4.0" />
     <PackageReference Include="Serilog.Settings.Configuration" Version="9.0.0" />
 
-    <PackageReference Include="System.Diagnostics.TraceSource" Version="4.3.0" />
     <PackageReference Include="AutoFixture" Version="4.18.0" />
     <PackageReference Include="FluentAssertions" Version="6.11.0" />
     <PackageReference Include="Moq" Version="4.18.4" />

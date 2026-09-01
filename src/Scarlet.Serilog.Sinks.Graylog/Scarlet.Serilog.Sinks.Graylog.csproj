@@ -3,7 +3,7 @@
         <LangVersion>11.0</LangVersion>
     </PropertyGroup>
     <PropertyGroup>
-        <TargetFrameworks>net7.0;net6.0;netstandard2.0</TargetFrameworks>
+        <TargetFrameworks>net10.0;net9.0;net8.0;net6.0;net471;net462;netstandard2.0</TargetFrameworks>
         <RestorePackages>true</RestorePackages>
         <DebugType>full</DebugType>
         <Nullable>enable</Nullable>
@@ -51,10 +51,16 @@
         <PackageReference Include="Serilog" Version="4.2.0"/>
     </ItemGroup>
 
-    <ItemGroup Condition="('$(TargetFramework)'=='netstandard2.0')">
+    <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework'">
+        <!--Lets the .NET Framework targets build on non-Windows CI agents.-->
+        <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all"/>
+        <!--System.Net.Http is not an implicit framework reference on .NET Framework.-->
+        <Reference Include="System.Net.Http"/>
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(TargetFrameworkIdentifier)' != '.NETCoreApp'">
       <PackageReference Include="System.Text.Json" Version="9.0.19"/>
       <PackageReference Include="System.Memory" Version="4.5.5"/>
-      <PackageReference Include="System.Text.Encoding" Version="4.3.0"/>
     </ItemGroup>
 
     <ItemGroup>

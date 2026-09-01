@@ -40,7 +40,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
     {
         public byte[] GenerateMessageId(byte[] message)
         {
-#if NETSTANDARD2_0
+#if !NET
             using MD5 md5 = MD5.Create();
             
             byte[] messageHash = md5.ComputeHash(message);
