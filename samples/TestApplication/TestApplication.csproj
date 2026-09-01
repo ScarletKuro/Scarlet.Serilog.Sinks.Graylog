@@ -15,7 +15,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\Scarlet.Serilog.Sinks.Graylog\Scarlet.Serilog.Sinks.Graylog.csproj" />
+      <ProjectReference Include="..\..\src\Scarlet.Serilog.Sinks.Graylog\Scarlet.Serilog.Sinks.Graylog.csproj" />
     </ItemGroup>
 
 </Project>

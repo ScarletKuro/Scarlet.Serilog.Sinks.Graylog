@@ -28,8 +28,8 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
 
-    <ProjectReference Include="..\Scarlet.Serilog.Sinks.Graylog\Scarlet.Serilog.Sinks.Graylog.csproj" />
-    <ProjectReference Include="..\Scarlet.Serilog.Sinks.Graylog.Core\Scarlet.Serilog.Sinks.Graylog.Core.csproj" />
+    <ProjectReference Include="..\..\src\Scarlet.Serilog.Sinks.Graylog\Scarlet.Serilog.Sinks.Graylog.csproj" />
+    <ProjectReference Include="..\..\src\Scarlet.Serilog.Sinks.Graylog.Core\Scarlet.Serilog.Sinks.Graylog.Core.csproj" />
 
     <DotNetCliToolReference Include="dotnet-xunit" Version="2.3.1" />
   </ItemGroup>

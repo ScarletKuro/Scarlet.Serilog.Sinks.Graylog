@@ -4,10 +4,16 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="src/Scarlet.Serilog.Sinks.Graylog.Batching/Scarlet.Serilog.Sinks.Graylog.Batching.csproj" />
-  <Project Path="src/Scarlet.Serilog.Sinks.Graylog.Core.Tests/Scarlet.Serilog.Sinks.Graylog.Core.Tests.csproj" />
-  <Project Path="src/Scarlet.Serilog.Sinks.Graylog.Core/Scarlet.Serilog.Sinks.Graylog.Core.csproj" />
-  <Project Path="src/Scarlet.Serilog.Sinks.Graylog.Tests/Scarlet.Serilog.Sinks.Graylog.Tests.csproj" />
-  <Project Path="src/Scarlet.Serilog.Sinks.Graylog/Scarlet.Serilog.Sinks.Graylog.csproj" />
-  <Project Path="src/TestApplication/TestApplication.csproj" />
+  <Folder Name="/src/">
+    <Project Path="src/Scarlet.Serilog.Sinks.Graylog/Scarlet.Serilog.Sinks.Graylog.csproj" />
+    <Project Path="src/Scarlet.Serilog.Sinks.Graylog.Batching/Scarlet.Serilog.Sinks.Graylog.Batching.csproj" />
+    <Project Path="src/Scarlet.Serilog.Sinks.Graylog.Core/Scarlet.Serilog.Sinks.Graylog.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Scarlet.Serilog.Sinks.Graylog.Tests/Scarlet.Serilog.Sinks.Graylog.Tests.csproj" />
+    <Project Path="tests/Scarlet.Serilog.Sinks.Graylog.Core.Tests/Scarlet.Serilog.Sinks.Graylog.Core.Tests.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/TestApplication/TestApplication.csproj" />
+  </Folder>
 </Solution>
