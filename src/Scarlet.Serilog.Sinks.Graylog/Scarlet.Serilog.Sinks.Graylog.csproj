@@ -28,7 +28,8 @@
         <FileVersion>4.0.0.0</FileVersion>
         <SignAssembly>true</SignAssembly>
 
-        <AssemblyOriginatorKeyFile>sign.snk</AssemblyOriginatorKeyFile>
+        <AssemblyOriginatorKeyFile>..\..\sign.snk</AssemblyOriginatorKeyFile>
+        <AssemblySignPublicKey>0024000004800000940000000602000000240000525341310004000001000100150475100d4074498f92b2e076cd16a1745c62a5f3a40a2fdff5210476b7f01952251b2967306c881b514b625292fe66325e773fe6cbbf509c4014c70bbfd47cf2b52a81f50c663ae5999ed429367bd1f54f9841c86ee87a6b78b1873aa203d956e77d1b47918312dff152d7f71e24d2896dd9026a2e126375714bedd53cbc9f</AssemblySignPublicKey>
 
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageReleaseNotes>
@@ -41,10 +42,10 @@
     </PropertyGroup>
     <ItemGroup>
         <EmbeddedResource Include="**\*.resx"/>
+        <InternalsVisibleTo Include="Scarlet.Serilog.Sinks.Graylog.Tests, PublicKey=$(AssemblySignPublicKey)" />
 
         <None Include="..\serilog-sink-nuget.png" Pack="true" Visible="false" PackagePath=""/>
         <None Remove="*.ncrunchproject"/>
-        <None Include="sign.snk"/>
     </ItemGroup>
 
     <ItemGroup>
