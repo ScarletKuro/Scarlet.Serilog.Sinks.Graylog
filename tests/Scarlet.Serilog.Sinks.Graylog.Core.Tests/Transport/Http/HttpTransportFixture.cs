@@ -1,5 +1,5 @@
 using AutoFixture;
-using Moq;
+using NSubstitute;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http;
 using System.Threading.Tasks;
@@ -19,15 +19,15 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests.Transport.Http
         [Fact]
         public async Task WhenCallSend_ThenCallSendWithoutAnyChanges()
         {
-            var transportClient = new Mock<ITransportClient<string>>();
+            var transportClient = Substitute.For<ITransportClient<string>>();
 
-            var target = new HttpTransport(transportClient.Object);
+            var target = new HttpTransport(transportClient);
 
             var payload = _fixture.Create<string>();
 
             await target.Send(payload);
 
-            transportClient.Verify(c => c.Send(payload), Times.Once);
+            await transportClient.Received(1).Send(payload);
         }
     }
 }

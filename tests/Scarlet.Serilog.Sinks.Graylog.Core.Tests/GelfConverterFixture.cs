@@ -1,4 +1,4 @@
-using Moq;
+using NSubstitute;
 using Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders;
 using Scarlet.Serilog.Sinks.Graylog.Tests;
 using System;
@@ -12,13 +12,13 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests
         [Fact]
         public void WhenLogEvent_ThenMessageBuilderShouldBeCalled()
         {
-            var errorBuilder = new Mock<IMessageBuilder>();
-            var messageBuilder = new Mock<IMessageBuilder>();
+            var errorBuilder = Substitute.For<IMessageBuilder>();
+            var messageBuilder = Substitute.For<IMessageBuilder>();
 
             var messageBuilders = new Dictionary<BuilderType, Lazy<IMessageBuilder>>
             {
-                [BuilderType.Exception] = new Lazy<IMessageBuilder>(() => errorBuilder.Object),
-                [BuilderType.Message] = new Lazy<IMessageBuilder>(() => messageBuilder.Object)
+                [BuilderType.Exception] = new Lazy<IMessageBuilder>(() => errorBuilder),
+                [BuilderType.Message] = new Lazy<IMessageBuilder>(() => messageBuilder)
             };
 
             GelfConverter target = new(messageBuilders);
@@ -27,20 +27,20 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests
 
             target.GetGelfJson(simpleEvent);
 
-            errorBuilder.Verify(c => c.Build(simpleEvent), Times.Never);
-            messageBuilder.Verify(c => c.Build(simpleEvent), Times.Once);
+            errorBuilder.DidNotReceive().Build(simpleEvent);
+            messageBuilder.Received(1).Build(simpleEvent);
         }
 
         [Fact]
         public void WhenLogErrorEvent_ThenErrorMessageBuilderShouldBeCalled()
         {
-            var errorBuilder = new Mock<IMessageBuilder>();
-            var messageBuilder = new Mock<IMessageBuilder>();
+            var errorBuilder = Substitute.For<IMessageBuilder>();
+            var messageBuilder = Substitute.For<IMessageBuilder>();
 
             var messageBuilders = new Dictionary<BuilderType, Lazy<IMessageBuilder>>
             {
-                [BuilderType.Exception] = new Lazy<IMessageBuilder>(() => errorBuilder.Object),
-                [BuilderType.Message] = new Lazy<IMessageBuilder>(() => messageBuilder.Object)
+                [BuilderType.Exception] = new Lazy<IMessageBuilder>(() => errorBuilder),
+                [BuilderType.Message] = new Lazy<IMessageBuilder>(() => messageBuilder)
             };
 
             GelfConverter target = new(messageBuilders);
@@ -49,8 +49,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests
 
             target.GetGelfJson(simpleEvent);
 
-            errorBuilder.Verify(c => c.Build(simpleEvent), Times.Once);
-            messageBuilder.Verify(c => c.Build(simpleEvent), Times.Never);
+            errorBuilder.Received(1).Build(simpleEvent);
+            messageBuilder.DidNotReceive().Build(simpleEvent);
         }
     }
 }

@@ -1,5 +1,5 @@
 using AutoFixture;
-using Moq;
+using NSubstitute;
 using Scarlet.Serilog.Sinks.Graylog.Core.Extensions;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp;
@@ -14,8 +14,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests.Transport.Udp
         [Fact]
         public void WhenSend_ThenCallMethods()
         {
-            var transportClient = new Mock<ITransportClient<byte[]>>();
-            var dataToChunkConverter = new Mock<IDataToChunkConverter>();
+            var transportClient = Substitute.For<ITransportClient<byte[]>>();
+            var dataToChunkConverter = Substitute.For<IDataToChunkConverter>();
             var options = new GraylogSinkOptions();
 
             var fixture = new Fixture();
@@ -26,17 +26,17 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests.Transport.Udp
 
             List<byte[]> chunks = fixture.CreateMany<byte[]>(3).ToList();
 
-            dataToChunkConverter.Setup(c => c.ConvertToChunks(data)).Returns(chunks);
+            dataToChunkConverter.ConvertToChunks(Arg.Is<byte[]>(value => value.SequenceEqual(data))).Returns(chunks);
 
-            UdpTransport target = new(transportClient.Object, dataToChunkConverter.Object, options);
+            UdpTransport target = new(transportClient, dataToChunkConverter, options);
 
             target.Send(stringData);
 
-            dataToChunkConverter.Verify(c => c.ConvertToChunks(data), Times.Once);
+            dataToChunkConverter.Received(1).ConvertToChunks(Arg.Is<byte[]>(value => value.SequenceEqual(data)));
 
             foreach (byte[] chunk in chunks)
             {
-                transportClient.Verify(c => c.Send(chunk), Times.Once);
+                transportClient.Received(1).Send(Arg.Is<byte[]>(value => value.SequenceEqual(chunk)));
             }
 
         }

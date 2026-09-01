@@ -1,4 +1,4 @@
-using Moq;
+using NSubstitute;
 using Newtonsoft.Json.Linq;
 using Serilog.Events;
 using Serilog.Parsing;
@@ -16,12 +16,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         [Fact(Skip = "This test not work anymore because IMessageBuilder gets from internal dictionary")]
         public void WhenEmit_ThenSendData()
         {
-            var gelfConverter = new Mock<IGelfConverter>();
-            var transport = new Mock<ITransport>();
+            var gelfConverter = Substitute.For<IGelfConverter>();
+            var transport = Substitute.For<ITransport>();
 
             var options = new GraylogSinkOptions
             {
-                GelfConverter = gelfConverter.Object,
+                GelfConverter = gelfConverter,
                 TransportType = TransportType.Udp,
                 HostnameOrAddress = "localhost"
             };
@@ -32,16 +32,14 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
                 new MessageTemplate("O_o", new List<MessageTemplateToken>()), new List<LogEventProperty>());
 
             var jObject = new JObject();
-            transport.Setup(c => c.Send(jObject.ToString(Newtonsoft.Json.Formatting.None))).Returns(Task.CompletedTask);
+            transport.Send(jObject.ToString(Newtonsoft.Json.Formatting.None)).Returns(Task.CompletedTask);
 
 
-            //gelfConverter.Setup(c => c.GetGelfJson(logEvent)).Returns(jObject);
+            //gelfConverter.GetGelfJson(logEvent).Returns(jObject);
 
             target.Emit(logEvent);
 
-            gelfConverter.VerifyAll();
-
-            transport.Verify(c => c.Send(It.IsAny<string>()));
+            transport.Received().Send(Arg.Any<string>());
         }
     }
 }

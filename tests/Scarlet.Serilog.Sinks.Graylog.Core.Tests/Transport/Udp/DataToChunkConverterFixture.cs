@@ -1,5 +1,5 @@
 using AutoFixture;
-using Moq;
+using NSubstitute;
 using Scarlet.Serilog.Sinks.Graylog.Core.Helpers;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp;
 using System;
@@ -13,19 +13,19 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests.Transport.Udp
     {
         private readonly ChunkSettings _settings;
         private readonly Fixture _fixture;
-        private readonly Mock<IMessageIdGeneratorResolver> _resolver;
+        private readonly IMessageIdGeneratorResolver _resolver;
 
         public DataToChunkConverterFixture()
         {
             _settings = new ChunkSettings(MessageIdGeneratorType.Md5, 8192);
             _fixture = new Fixture();
-            _resolver = new Mock<IMessageIdGeneratorResolver>();
+            _resolver = Substitute.For<IMessageIdGeneratorResolver>();
         }
 
         [Fact]
         public void WhenConvertToChunkWithSmallData_ThenReturnsOneChunk()
         {
-            var target = new DataToChunkConverter(_settings, _resolver.Object);
+            var target = new DataToChunkConverter(_settings, _resolver);
 
             byte[] giwenData = _fixture.CreateMany<byte>(1000).ToArray();
             IList<byte[]> actual = target.ConvertToChunks(giwenData);
@@ -43,7 +43,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests.Transport.Udp
         {
             byte[] giwenData = new byte[10000000];
 
-            var target = new DataToChunkConverter(_settings, _resolver.Object);
+            var target = new DataToChunkConverter(_settings, _resolver);
 
             Assert.Throws<ArgumentException>(() => target.ConvertToChunks(giwenData));
         }
@@ -53,16 +53,16 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests.Transport.Udp
         {
             byte[] giwenData = new byte[100000];
 
-            var idGenerator = new Mock<IMessageIdGenerator>();
+            var idGenerator = Substitute.For<IMessageIdGenerator>();
 
             var messageId = _fixture.CreateMany<byte>(8).ToArray();
 
-            idGenerator.Setup(c => c.GenerateMessageId(giwenData)).Returns(messageId);
+            idGenerator.GenerateMessageId(giwenData).Returns(messageId);
 
-            _resolver.Setup(c => c.Resolve(_settings.MessageIdGeneratorType))
-                .Returns(idGenerator.Object);
+            _resolver.Resolve(_settings.MessageIdGeneratorType)
+                .Returns(idGenerator);
 
-            var target = new DataToChunkConverter(_settings, _resolver.Object);
+            var target = new DataToChunkConverter(_settings, _resolver);
 
             var actual = target.ConvertToChunks(giwenData);
 
