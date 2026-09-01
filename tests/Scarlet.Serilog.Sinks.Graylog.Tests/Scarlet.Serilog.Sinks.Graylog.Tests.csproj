@@ -1,13 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net10.0;net8.0;net6.0</TargetFrameworks>
+    <TargetFrameworks>net10.0;net8.0</TargetFrameworks>
     <IsPackable>false</IsPackable>
     <SignAssembly>true</SignAssembly>
     <AssemblyOriginatorKeyFile>..\..\sign.snk</AssemblyOriginatorKeyFile>
-    <!--Test-only dependencies (Serilog.Settings.Configuration 9.x and its Microsoft.Extensions.*
-         transitives) warn that they are untested on net6.0. The library itself ships net6.0,
-         so we keep testing it there.-->
-    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
   </PropertyGroup>
   <ItemGroup>
     <None Remove="Configurations\AppSettingsWithGraylogSinkContainingHostProperty.json" />
