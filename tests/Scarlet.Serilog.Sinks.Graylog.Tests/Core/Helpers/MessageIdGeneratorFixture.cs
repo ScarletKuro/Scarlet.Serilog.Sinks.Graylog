@@ -5,7 +5,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using Xunit;
 
-namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests.Helpers
+namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Helpers
 {
     public class MessageIdGeneratorFixture
     {

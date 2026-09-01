@@ -9,7 +9,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Scarlet.Serilog.Sinks.Graylog.Tests/Scarlet.Serilog.Sinks.Graylog.Tests.csproj" />
-    <Project Path="tests/Scarlet.Serilog.Sinks.Graylog.Core.Tests/Scarlet.Serilog.Sinks.Graylog.Core.Tests.csproj" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/TestApplication/TestApplication.csproj" />

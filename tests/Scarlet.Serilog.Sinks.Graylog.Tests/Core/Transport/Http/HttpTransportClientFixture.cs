@@ -3,7 +3,7 @@ using Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http;
 using System.Threading.Tasks;
 using Xunit;
 
-namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests.Transport.Http
+namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
 {
     public class HttpTransportClientFixture
     {

@@ -1,7 +1,7 @@
 using Scarlet.Serilog.Sinks.Graylog.Core.Extensions;
 using Xunit;
 
-namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests.Extensions
+namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Extensions
 {
     public class StringExtensionsFixture
     {

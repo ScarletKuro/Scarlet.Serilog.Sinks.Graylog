@@ -4,7 +4,7 @@ using Scarlet.Serilog.Sinks.Graylog.Tests;
 using System;
 using Xunit;
 
-namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests.MessageBuilders
+namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
 {
     public class ExceptionMessageBuilderFixture
     {

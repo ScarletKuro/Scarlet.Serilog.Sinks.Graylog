@@ -4,9 +4,9 @@ using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
 
-namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests.Transport.Udp
+namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
 {
-    using Core.Transport;
+    using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 
     public class UdpTransportClientFixture
     {

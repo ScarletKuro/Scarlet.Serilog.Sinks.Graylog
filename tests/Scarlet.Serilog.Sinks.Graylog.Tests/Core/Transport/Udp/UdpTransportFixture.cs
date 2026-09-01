@@ -7,7 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
-namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests.Transport.Udp
+namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
 {
     public class UdpTransportFixture
     {

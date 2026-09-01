@@ -59,8 +59,7 @@ jobs:
           path: '**/TestResults/*.trx'
           if-no-files-found: ignore
 
-      # Coverlet writes one Cobertura report per target framework. Both test projects
-      # use the same file name, so gather them under project-qualified names before upload.
+      # Coverlet writes one Cobertura report per target framework; gather the reports before upload.
       - name: Collect coverage reports
         if: always()
         run: |

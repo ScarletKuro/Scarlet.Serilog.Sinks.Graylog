@@ -6,7 +6,7 @@ using System;
 using System.Collections.Generic;
 using Xunit;
 
-namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests.MessageBuilders
+namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
 {
     public class GelfMessageBuilderFixture
     {

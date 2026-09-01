@@ -3,7 +3,7 @@ using System.Net;
 using System.Threading.Tasks;
 using Xunit;
 
-namespace Scarlet.Serilog.Sinks.Graylog.Core.Tests.Transport
+namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport
 {
     public class DnsWrapperFixture
     {
