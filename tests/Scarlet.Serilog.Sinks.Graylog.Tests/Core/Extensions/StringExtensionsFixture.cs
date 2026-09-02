@@ -6,7 +6,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Extensions
     public class StringExtensionsFixture
     {
         [Fact]
-        public void WhenCompressMessage_ThenResultShoouldBeExpected()
+        public void WhenCompressMessage_ThenResultShouldBeExpected()
         {
             var giwen = "Some string";
             var expected = new byte[]

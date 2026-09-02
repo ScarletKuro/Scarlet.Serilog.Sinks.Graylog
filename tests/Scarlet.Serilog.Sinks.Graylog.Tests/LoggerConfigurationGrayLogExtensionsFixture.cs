@@ -1,6 +1,7 @@
 using Serilog;
 using Microsoft.Extensions.Configuration;
 using Serilog.Configuration;
+using Serilog.Core;
 using Serilog.Events;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 using Scarlet.Serilog.Sinks.Graylog.Tests.Fakes;
@@ -44,22 +45,31 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             Assert.NotNull(logger);
         }
 
-        //[Fact(Skip="Integration test")]
+        /// <summary>
+        /// A configuration whose Graylog args include "host" has to bind: Serilog.Settings.Configuration
+        /// will not pick a candidate method at all if the JSON supplies an argument no parameter matches,
+        /// and it reports that to SelfLog rather than throwing - so a renamed parameter turns the sink
+        /// off silently. <see cref="ThereIsExactlyOneGraylogConvenienceOverload"/> guards the shape of
+        /// the overload that has to match.
+        /// </summary>
+        /// <remarks>
+        /// The configured sink points at a port nothing listens on, and JSON cannot supply a
+        /// <c>TransportFactory</c>, so delivery is out of reach here. That the "host" argument reaches
+        /// the payload as GELF's host field is covered by
+        /// <c>GelfMessageBuilderFixture.GetSimpleLogEvent_GraylogSinkOptionsContainsHost_ReturnsOptionsHost</c>.
+        /// </remarks>
         [Fact]
         public void CanReadHostPropertyConfiguration()
         {
-            //arrange
             IConfigurationRoot configuration = ConfigurationFromResource(
                 "Scarlet.Serilog.Sinks.Graylog.Tests.Configurations.AppSettingsWithGraylogSinkContainingHostProperty.json");
 
-            Log.Logger = new LoggerConfiguration()
+            using Logger logger = new LoggerConfiguration()
                 .ReadFrom.Configuration(configuration)
                 .CreateLogger();
 
-            //act
-            Log.Information("Hello {ApplicationName}.", "SerilogGraylogSink");
-
-            //assert
+            Assert.NotNull(logger);
+            Assert.Null(Record.Exception(() => logger.Information("Hello {ApplicationName}.", "SerilogGraylogSink")));
         }
 
         [Fact]
@@ -67,12 +77,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         {
             var transport = new RecordingTransport();
 
-            using (var logger = new LoggerConfiguration().WriteTo.Graylog(OptionsFor(transport)).CreateLogger())
-            {
-                logger.Information("hello");
+            using var logger = new LoggerConfiguration().WriteTo.Graylog(transport.SinkOptions()).CreateLogger();
+            logger.Information("hello");
 
-                Assert.Single(transport.Payloads);
-            }
+            Assert.Single(transport.Payloads);
         }
 
         [Fact]
@@ -80,12 +88,11 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         {
             var transport = new RecordingTransport();
 
-            var options = OptionsFor(transport);
-            options.Batching = new BatchingOptions
+            GraylogSinkOptions options = transport.SinkOptions(o => o.Batching = new BatchingOptions
             {
                 EagerlyEmitFirstEvent = false,
                 BufferingTimeLimit = TimeSpan.FromMinutes(5)
-            };
+            });
 
             var logger = new LoggerConfiguration().WriteTo.Graylog(options).CreateLogger();
 
@@ -103,7 +110,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             // after optional would be ambiguous at the call site, and would also make
             // Serilog.Settings.Configuration unable to pick a candidate from JSON args.
             var graylogMethods = typeof(GraylogSink).Assembly.GetTypes()
-                .Where(t => t.IsSealed && t.IsAbstract)
+                .Where(t => t is { IsSealed: true, IsAbstract: true })
                 .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.Static))
                 .Where(m => m.Name == "Graylog"
                             && m.IsDefined(typeof(ExtensionAttribute), false)
@@ -140,17 +147,6 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             return new ConfigurationBuilder()
                 .AddJsonStream(stream)
                 .Build();
-        }
-
-        private static GraylogSinkOptions OptionsFor(ITransport transport)
-        {
-            return new GraylogSinkOptions
-            {
-                HostnameOrAddress = "localhost",
-                Port = 12201,
-                TransportType = TransportType.Custom,
-                TransportFactory = () => transport
-            };
         }
     }
 }

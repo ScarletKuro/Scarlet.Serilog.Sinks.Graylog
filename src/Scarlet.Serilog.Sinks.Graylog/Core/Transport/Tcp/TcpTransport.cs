@@ -17,7 +17,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
         public Task Send(string message)
         {
 #if NET
-            var payload = new byte[message.Length + 1];
+            int byteCount = System.Text.Encoding.UTF8.GetByteCount(message);
+            var payload = new byte[byteCount + 1];
             System.Text.Encoding.UTF8.GetBytes(message.AsSpan(), payload.AsSpan());
             payload[^1] = 0x00;
 

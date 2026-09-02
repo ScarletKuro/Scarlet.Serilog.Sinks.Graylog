@@ -1,4 +1,3 @@
-using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 using Scarlet.Serilog.Sinks.Graylog.Tests.Fakes;
 using Serilog.Configuration;
 using Serilog.Core;
@@ -12,21 +11,6 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
 {
     public class BatchingFixture
     {
-        private static GraylogSinkOptions OptionsFor(ITransport transport, Action<GraylogSinkOptions>? configure = null)
-        {
-            var options = new GraylogSinkOptions
-            {
-                HostnameOrAddress = "localhost",
-                Port = 12201,
-                TransportType = TransportType.Custom,
-                TransportFactory = () => transport
-            };
-
-            configure?.Invoke(options);
-
-            return options;
-        }
-
         private static LogEvent[] Events(int count)
         {
             var events = new LogEvent[count];
@@ -43,7 +27,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         public async Task EmitBatchAsync_SendsOnePayloadPerEvent()
         {
             var transport = new RecordingTransport();
-            using var sink = new GraylogSink(OptionsFor(transport));
+            using var sink = new GraylogSink(transport.SinkOptions());
 
             await sink.EmitBatchAsync(Events(3));
 
@@ -55,7 +39,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         {
             // Concurrent sends would interleave TCP GELF frames on the single shared stream.
             var transport = new RecordingTransport(_ => Task.Delay(20));
-            using var sink = new GraylogSink(OptionsFor(transport));
+            using var sink = new GraylogSink(transport.SinkOptions());
 
             await sink.EmitBatchAsync(Events(5));
 
@@ -67,11 +51,11 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         {
             // Serilog's batching infrastructure owns retry, so failures must not be swallowed.
             var transport = new RecordingTransport(_ => Task.FromException(new InvalidOperationException("boom")));
-            using var sink = new GraylogSink(OptionsFor(transport));
+            using var sink = new GraylogSink(transport.SinkOptions());
 
-            Func<Task> act = () => sink.EmitBatchAsync(Events(1));
+            Task Act() => sink.EmitBatchAsync(Events(1));
 
-            var exception = await Assert.ThrowsAsync<InvalidOperationException>(act);
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(Act);
             Assert.Equal("boom", exception.Message);
         }
 
@@ -80,7 +64,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         {
             // The unbatched path stays fire-and-forget and reports through SelfLog instead.
             var transport = new RecordingTransport(_ => Task.FromException(new InvalidOperationException("boom")));
-            using var sink = new GraylogSink(OptionsFor(transport));
+            using var sink = new GraylogSink(transport.SinkOptions());
 
             var exception = Record.Exception(() => sink.Emit(LogEventSource.GetSimpleLogEvent(DateTimeOffset.Now)));
             Assert.Null(exception);
@@ -92,7 +76,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             // Regression guard: JsonNode.ToString() hard-codes Indented = true, so the sink must
             // serialize through ToJsonString(options) instead.
             var compact = new RecordingTransport();
-            using (var sink = new GraylogSink(OptionsFor(compact)))
+            using (var sink = new GraylogSink(compact.SinkOptions()))
             {
                 await sink.EmitBatchAsync(Events(1));
             }
@@ -100,7 +84,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             Assert.DoesNotContain("\n", Assert.Single(compact.Payloads));
 
             var indented = new RecordingTransport();
-            using (var sink = new GraylogSink(OptionsFor(indented, o => o.JsonSerializerOptions = new JsonSerializerOptions { WriteIndented = true })))
+            using (var sink = new GraylogSink(indented.SinkOptions(o => o.JsonSerializerOptions = new JsonSerializerOptions { WriteIndented = true })))
             {
                 await sink.EmitBatchAsync(Events(1));
             }
@@ -114,7 +98,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             // Serilog only supplies a default implementation of this on net6.0+, so netstandard2.0
             // and .NET Framework need our own body; this is the canary for it.
             var transport = new RecordingTransport();
-            using var sink = new GraylogSink(OptionsFor(transport));
+            using var sink = new GraylogSink(transport.SinkOptions());
 
             await sink.OnEmptyBatchAsync();
 
@@ -127,7 +111,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             int created = 0;
             var transport = new RecordingTransport();
 
-            var sink = new GraylogSink(OptionsFor(transport, o => o.TransportFactory = () =>
+            var sink = new GraylogSink(transport.SinkOptions(o => o.TransportFactory = () =>
             {
                 created++;
                 return transport;
@@ -143,7 +127,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         public async Task Dispose_DisposesTheTransportOnceItExists()
         {
             var transport = new RecordingTransport();
-            var sink = new GraylogSink(OptionsFor(transport));
+            var sink = new GraylogSink(transport.SinkOptions());
 
             await sink.EmitBatchAsync(Events(1));
 
@@ -157,7 +141,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         public void GraylogSink_ImplementsBothSinkContracts()
         {
             var transport = new RecordingTransport();
-            using var sink = new GraylogSink(OptionsFor(transport));
+            using var sink = new GraylogSink(transport.SinkOptions());
 
             Assert.IsAssignableFrom<ILogEventSink>(sink);
             Assert.IsAssignableFrom<IBatchedLogEventSink>(sink);
@@ -193,7 +177,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             var result = (BatchingOptions?)InvokeBuildBatchingOptions(true, 500, TimeSpan.FromSeconds(7), 4242, TimeSpan.FromMinutes(3), false);
 
             Assert.NotNull(result);
-            Assert.Equal(500, result!.BatchSizeLimit);
+            Assert.Equal(500, result.BatchSizeLimit);
             Assert.Equal(TimeSpan.FromSeconds(7), result.BufferingTimeLimit);
             Assert.Equal(4242, result.QueueLimit);
             Assert.Equal(TimeSpan.FromMinutes(3), result.RetryTimeLimit);
@@ -207,7 +191,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             var defaults = new BatchingOptions();
 
             Assert.NotNull(result);
-            Assert.Equal(defaults.BatchSizeLimit, result!.BatchSizeLimit);
+            Assert.Equal(defaults.BatchSizeLimit, result.BatchSizeLimit);
             Assert.Equal(defaults.BufferingTimeLimit, result.BufferingTimeLimit);
             Assert.Equal(defaults.QueueLimit, result.QueueLimit);
             Assert.Equal(defaults.RetryTimeLimit, result.RetryTimeLimit);
@@ -222,7 +206,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             var result = (BatchingOptions?)InvokeBuildBatchingOptions(null, null, null, 0, null, null);
 
             Assert.NotNull(result);
-            Assert.Null(result!.QueueLimit);
+            Assert.Null(result.QueueLimit);
         }
 
         /// <summary>
@@ -242,7 +226,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
 
             Assert.NotNull(method);
 
-            return method!.Invoke(null, new object?[]
+            return method.Invoke(null, new object?[]
             {
                 batched, batchSizeLimit, bufferingTimeLimit, queueLimit, retryTimeLimit, eagerlyEmitFirstEvent
             });

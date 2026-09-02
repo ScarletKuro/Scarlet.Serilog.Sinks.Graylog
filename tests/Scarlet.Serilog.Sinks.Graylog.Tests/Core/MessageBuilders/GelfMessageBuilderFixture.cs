@@ -1,7 +1,6 @@
 using Serilog.Events;
 using Serilog.Parsing;
 using Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders;
-using Scarlet.Serilog.Sinks.Graylog.Tests;
 using System;
 using System.Collections.Generic;
 using Xunit;
@@ -11,41 +10,20 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
     public class GelfMessageBuilderFixture
     {
         [Fact]
-        [Trait("Category", "Debug")]
-        public void TryComplexEvent()
-        {
-            var options = new GraylogSinkOptions();
-            var target = new GelfMessageBuilder("localhost", options);
-
-            DateTimeOffset date = DateTimeOffset.Now;
-
-            LogEvent logEvent = LogEventSource.GetComplexEvent(date);
-
-        }
-
-        [Fact]
         public void GetSimpleLogEvent_GraylogSinkOptionsContainsHost_ReturnsOptionsHost()
         {
-            //arrange
             GraylogSinkOptions options = new()
             {
                 HostnameOverride = "my_host"
             };
             GelfMessageBuilder messageBuilder = new("localhost", options);
-            DateTime date = DateTime.UtcNow;
-            string expectedHost = "my_host";
 
-            //act
-            LogEvent logEvent = LogEventSource.GetSimpleLogEvent(date);
-            var actual = messageBuilder.Build(logEvent);
-            var host = actual["host"];
+            LogEvent logEvent = LogEventSource.GetSimpleLogEvent(DateTime.UtcNow);
+            var host = messageBuilder.Build(logEvent)["host"];
+
             Assert.NotNull(host);
-            string actualHost = host.AsValue().ToString();
-
-            //assert
-            Assert.Equal(expectedHost, actualHost);
+            Assert.Equal("my_host", host.AsValue().ToString());
         }
-
 
         [Fact]
         public static void WhenTryCreateLogEventWithNullKeyOrValue_ThenThrow()

@@ -1,7 +1,6 @@
 using NSubstitute;
 using Scarlet.Serilog.Sinks.Graylog.Core;
 using Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders;
-using Scarlet.Serilog.Sinks.Graylog.Tests;
 using System;
 using System.Collections.Generic;
 using Xunit;

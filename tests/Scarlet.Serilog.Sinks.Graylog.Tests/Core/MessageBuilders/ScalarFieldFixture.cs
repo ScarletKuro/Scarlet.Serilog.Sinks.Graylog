@@ -78,13 +78,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
         [MemberData(nameof(IdenticalOnBothPaths))]
         public void Build_WithContractAvailable_WritesExpectedJson(object value, string expected)
         {
-            //arrange
             GelfMessageBuilder messageBuilder = new("localhost", OptionsWith(new JsonSerializerOptions()));
 
-            //act
             string actual = FieldJson(messageBuilder, value);
 
-            //assert
             Assert.Equal(expected, actual);
         }
 
@@ -92,13 +89,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
         [MemberData(nameof(IdenticalOnBothPaths))]
         public void Build_WithoutContractAvailable_WritesSameJsonAsContractPath(object value, string expected)
         {
-            //arrange
             GelfMessageBuilder messageBuilder = new("localhost", OptionsWith(NoContracts()));
 
-            //act
             string actual = FieldJson(messageBuilder, value);
 
-            //assert
             Assert.Equal(expected, actual);
         }
 
@@ -115,16 +109,13 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
         [Fact]
         public void Build_DateTimeOffset_BothPathsDecodeToTheSameInstant()
         {
-            //arrange
             DateTimeOffset value = new(2026, 9, 2, 13, 45, 30, TimeSpan.FromHours(3));
             GelfMessageBuilder contractBuilder = new("localhost", OptionsWith(new JsonSerializerOptions()));
             GelfMessageBuilder fallbackBuilder = new("localhost", OptionsWith(NoContracts()));
 
-            //act
             string contractJson = FieldJson(contractBuilder, value);
             string fallbackJson = FieldJson(fallbackBuilder, value);
 
-            //assert
             Assert.Equal("\"2026-09-02T13:45:30\\u002B03:00\"", contractJson);
             Assert.Equal("\"2026-09-02T13:45:30+03:00\"", fallbackJson);
             Assert.Equal(value, JsonSerializer.Deserialize<DateTimeOffset>(contractJson));
@@ -145,41 +136,32 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
         [MemberData(nameof(PreviouslyUnserializable))]
         public void Build_TypesSystemTextJsonRejects_AreWrittenInsteadOfThrowing(object value, string expected)
         {
-            //arrange
             GelfMessageBuilder messageBuilder = new("localhost", OptionsWith(new JsonSerializerOptions()));
 
-            //act
             string actual = FieldJson(messageBuilder, value);
 
-            //assert
             Assert.Equal(expected, actual);
         }
 
         [Fact]
         public void Build_MemberInfo_IsWrittenAsItsSignature()
         {
-            //arrange
             GelfMessageBuilder messageBuilder = new("localhost", OptionsWith(new JsonSerializerOptions()));
             MethodInfo value = typeof(string).GetMethod("Trim", Type.EmptyTypes)!;
 
-            //act
             string actual = FieldJson(messageBuilder, value);
 
-            //assert
             Assert.Equal("\"System.String Trim()\"", actual);
         }
 
         [Fact]
         public void Build_NullScalar_IsWrittenAsJsonNull()
         {
-            //arrange
             GelfMessageBuilder messageBuilder = new("localhost", OptionsWith(new JsonSerializerOptions()));
             LogEvent logEvent = LogEventSource.GetScalarEvent("Val", null);
 
-            //act
             JsonObject actual = messageBuilder.Build(logEvent);
 
-            //assert
             Assert.True(actual.ContainsKey("_Val"));
             Assert.Null(actual["_Val"]);
         }
@@ -190,35 +172,28 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
         [Fact]
         public void Build_WithCustomConverter_StillHonoursTheConverter()
         {
-            //arrange
             JsonSerializerOptions serializerOptions = new();
             serializerOptions.Converters.Add(new UpperCaseStringConverter());
             GelfMessageBuilder messageBuilder = new("localhost", OptionsWith(serializerOptions));
 
-            //act
             string actual = FieldJson(messageBuilder, "abc");
 
-            //assert
             Assert.Equal("\"ABC\"", actual);
         }
 
         [Fact]
         public void Build_DictionaryValue_IsWrittenAsAJsonObjectOfRenderedKeys()
         {
-            //arrange
             GelfMessageBuilder messageBuilder = new("localhost", OptionsWith(new JsonSerializerOptions()));
-            DictionaryValue value = new(new[]
-            {
+            DictionaryValue value = new([
                 new KeyValuePair<ScalarValue, LogEventPropertyValue>(new ScalarValue("alpha"), new ScalarValue("one")),
                 new KeyValuePair<ScalarValue, LogEventPropertyValue>(new ScalarValue(2), new ScalarValue("two"))
-            });
+            ]);
             LogEvent logEvent = LogEventSource.GetPropertyEvent("Val", value);
 
-            //act
             JsonObject actual = messageBuilder.Build(logEvent);
 
-            //assert
-            Assert.Equal("{\"alpha\":\"one\",\"2\":\"two\"}", actual["Val"]!.ToJsonString());
+            Assert.Equal("{\"alpha\":\"one\",\"2\":\"two\"}", actual.Json("Val"));
         }
 
         private static GraylogSinkOptions OptionsWith(JsonSerializerOptions serializerOptions)
@@ -246,7 +221,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
         {
             LogEvent logEvent = LogEventSource.GetScalarEvent("Val", value);
 
-            return messageBuilder.Build(logEvent)["_Val"]!.ToJsonString();
+            return messageBuilder.Build(logEvent).Json("_Val");
         }
 
         private sealed class EmptyTypeInfoResolver : IJsonTypeInfoResolver

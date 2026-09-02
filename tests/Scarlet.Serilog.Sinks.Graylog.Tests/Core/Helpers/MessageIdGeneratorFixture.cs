@@ -25,10 +25,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Helpers
 
             byte[] actual = target.GenerateMessageId(given);
 
-            var actticks = BitConverter.ToInt64(actual, 0);
-            var actdate = DateTime.FromBinary(actticks);
+            var ticks = BitConverter.ToInt64(actual, 0);
+            var date = DateTime.FromBinary(ticks);
 
-            Assert.InRange(actdate, time - TimeSpan.FromMilliseconds(200), time + TimeSpan.FromMilliseconds(200));
+            Assert.InRange(date, time - TimeSpan.FromMilliseconds(200), time + TimeSpan.FromMilliseconds(200));
         }
 
         [Fact]

@@ -174,8 +174,9 @@ Native AOT and trimming are supported on `net8.0` and later. Nothing needs confi
 
 The sink builds every GELF field without reflection, so it works with reflection-based
 `System.Text.Json` serialization switched off. The assembly is marked trimmable and is built with the
-trim, single-file and AOT analyzers enabled; CI publishes a harness with `PublishAot` and asserts the
-payloads, so compatibility is verified end to end rather than only by analyzers.
+trim, single-file and AOT analyzers enabled; CI publishes a dedicated test project with `PublishAot`
+and runs it — once as-is and once with reflection-based serialization switched off — so compatibility
+is verified end to end rather than only by analyzers.
 
 ### Customizing how values are written
 

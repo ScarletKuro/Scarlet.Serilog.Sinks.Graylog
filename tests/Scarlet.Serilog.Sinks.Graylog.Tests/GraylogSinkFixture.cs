@@ -59,11 +59,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         [Fact]
         public void Emit_OnSingleThreadedSynchronizationContext_DoesNotBlock()
         {
-            //arrange
             // Completes only when the context pumps, which it never does.
             var neverCompletes = new TaskCompletionSource<bool>();
             RecordingTransport transport = new(_ => neverCompletes.Task);
-            GraylogSink target = new(OptionsFor(transport));
+            GraylogSink target = new(transport.SinkOptions());
             var returned = new ManualResetEventSlim();
 
             var uiThread = new Thread(() =>
@@ -75,10 +74,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
                 returned.Set();
             });
 
-            //act
             uiThread.Start();
 
-            //assert
             Assert.True(returned.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken),
                 "Emit did not return - it is waiting on the send.");
 
@@ -98,7 +95,6 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         [Fact]
         public void Emit_WhenTransportCannotBeCreated_Throws()
         {
-            //arrange
             GraylogSink target = new(new GraylogSinkOptions
             {
                 HostnameOrAddress = "localhost",
@@ -106,7 +102,6 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
                 TransportType = TransportType.Custom
             });
 
-            //act //assert
             Assert.ThrowsAny<Exception>(
                 () => target.Emit(LogEventSource.GetSimpleLogEvent(DateTimeOffset.UnixEpoch)));
         }
@@ -119,12 +114,11 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         [Fact]
         public async Task Emit_WhenSendFails_ReportsToSelfLog()
         {
-            //arrange
             const string failure = "graylog is down";
 
             var reported = new TaskCompletionSource<string>();
             RecordingTransport transport = new(_ => Task.FromException(new InvalidOperationException(failure)));
-            GraylogSink target = new(OptionsFor(transport));
+            GraylogSink target = new(transport.SinkOptions());
 
             // SelfLog is global and other test classes run in parallel, so only react to this failure.
             SelfLog.Enable(message =>
@@ -137,14 +131,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
 
             try
             {
-                //act
                 target.Emit(LogEventSource.GetSimpleLogEvent(DateTimeOffset.UnixEpoch));
 
                 Task completed = await Task.WhenAny(
                     reported.Task,
                     Task.Delay(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
 
-                //assert
                 Assert.Same(reported.Task, completed);
                 Assert.Contains("Could not send a log event to Graylog", await reported.Task);
             } finally
@@ -159,7 +151,6 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         [Fact]
         public void WriteTo_WhenTransportCannotBeCreated_DoesNotThrowToTheCaller()
         {
-            //arrange
             using Logger logger = new LoggerConfiguration()
                 .WriteTo.Graylog(new GraylogSinkOptions
                 {
@@ -168,18 +159,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
                 })
                 .CreateLogger();
 
-            //act //assert
-            logger.Information("this must not throw");
-        }
-
-        private static GraylogSinkOptions OptionsFor(ITransport transport)
-        {
-            return new GraylogSinkOptions
-            {
-                HostnameOrAddress = "localhost",
-                TransportType = TransportType.Custom,
-                TransportFactory = () => transport
-            };
+            Assert.Null(Record.Exception(() => logger.Information("this must not throw")));
         }
 
         /// <summary>

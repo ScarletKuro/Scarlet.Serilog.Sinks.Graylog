@@ -32,6 +32,25 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Fakes
         /// </summary>
         public int MaxObservedConcurrency { get; private set; }
 
+        /// <summary>
+        /// Sink options that route a logger to this transport instead of the network. The host and
+        /// port are still required by the sink even though <c>TransportType.Custom</c> never uses them.
+        /// </summary>
+        public GraylogSinkOptions SinkOptions(Action<GraylogSinkOptions>? configure = null)
+        {
+            var options = new GraylogSinkOptions
+            {
+                HostnameOrAddress = "localhost",
+                Port = 12201,
+                TransportType = TransportType.Custom,
+                TransportFactory = () => this
+            };
+
+            configure?.Invoke(options);
+
+            return options;
+        }
+
         public async Task Send(string message)
         {
             int concurrent = Interlocked.Increment(ref _concurrentSends);

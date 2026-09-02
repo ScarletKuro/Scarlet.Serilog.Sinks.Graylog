@@ -27,12 +27,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
         {
             var target = new DataToChunkConverter(_settings, _resolver);
 
-            byte[] giwenData = _fixture.CreateMany<byte>(1000).ToArray();
-            IList<byte[]> actual = target.ConvertToChunks(giwenData);
+            byte[] data = _fixture.CreateMany<byte>(1000).ToArray();
+            IList<byte[]> actual = target.ConvertToChunks(data);
 
-            var expected = new List<byte[]>()
+            var expected = new List<byte[]>
             {
-                giwenData
+                data
             };
 
             Assert.Equal(expected, actual);
@@ -41,30 +41,30 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
         [Fact]
         public void WhenChunksWasTooMany_ThenThrowsException()
         {
-            byte[] giwenData = new byte[10000000];
+            byte[] data = new byte[10000000];
 
             var target = new DataToChunkConverter(_settings, _resolver);
 
-            Assert.Throws<ArgumentException>(() => target.ConvertToChunks(giwenData));
+            Assert.Throws<ArgumentException>(() => target.ConvertToChunks(data));
         }
 
         [Fact]
         public void WhenMessageIsLong_ThenSplitItToChunks()
         {
-            byte[] giwenData = new byte[100000];
+            byte[] data = new byte[100000];
 
             var idGenerator = Substitute.For<IMessageIdGenerator>();
 
             var messageId = _fixture.CreateMany<byte>(8).ToArray();
 
-            idGenerator.GenerateMessageId(giwenData).Returns(messageId);
+            idGenerator.GenerateMessageId(data).Returns(messageId);
 
             _resolver.Resolve(_settings.MessageIdGeneratorType)
                 .Returns(idGenerator);
 
             var target = new DataToChunkConverter(_settings, _resolver);
 
-            var actual = target.ConvertToChunks(giwenData);
+            var actual = target.ConvertToChunks(data);
 
 
             Assert.True(actual.Count == 13);
