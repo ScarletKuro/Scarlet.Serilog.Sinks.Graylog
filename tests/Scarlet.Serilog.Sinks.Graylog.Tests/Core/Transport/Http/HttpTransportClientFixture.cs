@@ -1,5 +1,6 @@
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http;
 using System;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -130,6 +131,16 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
             Assert.Equal(message, target.Handler.Body);
         }
 
+        [Fact]
+        public async Task Send_ConcurrentCalls_CreateOneSharedHttpClient()
+        {
+            using var target = new ProbeHttpTransportClient(OptionsFor("http://logs.example.org"));
+
+            await Task.WhenAll(Enumerable.Range(0, 16).Select(_ => target.Send("{}")));
+
+            Assert.Equal(1, target.CreateHttpClientCount);
+        }
+
         /// <summary>
         /// A path on <c>HostnameOrAddress</c> is retained so a reverse proxy can route GELF requests.
         /// </summary>
@@ -183,6 +194,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
 
         private sealed class ProbeHttpTransportClient : HttpTransportClient
         {
+            private int _createHttpClientCount;
+
             public ProbeHttpTransportClient(GraylogSinkOptions options,
                                             HttpStatusCode status = HttpStatusCode.Accepted)
                 : base(options)
@@ -191,6 +204,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
             }
 
             public RecordingHandler Handler { get; }
+
+            public int CreateHttpClientCount => Volatile.Read(ref _createHttpClientCount);
 
             public HttpClient Configure()
             {
@@ -204,6 +219,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
 
             protected override HttpClient CreateHttpClient()
             {
+                Interlocked.Increment(ref _createHttpClientCount);
                 return new HttpClient(Handler);
             }
         }

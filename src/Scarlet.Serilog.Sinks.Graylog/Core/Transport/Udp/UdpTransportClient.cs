@@ -2,6 +2,7 @@
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading;
 using System.Threading.Tasks;
 using Serilog.Debugging;
 
@@ -17,6 +18,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
 
         private readonly GraylogSinkOptionsBase _options;
         private readonly IDnsInfoProvider _dnsInfoProvider;
+        private readonly SemaphoreSlim _sendLock = new(1, 1);
         private UdpClient? _client;
 
         public UdpTransportClient(GraylogSinkOptionsBase options, IDnsInfoProvider dnsInfoProvider)
@@ -53,14 +55,22 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
         /// <param name="payload">The payload.</param>
         public async Task Send(byte[] payload)
         {
-            if (!await EnsureTarget().ConfigureAwait(false))
+            await _sendLock.WaitAsync().ConfigureAwait(false);
+            try
             {
-                throw new InvalidOperationException("The Graylog endpoint could not be resolved.");
-            }
+                if (!await EnsureTarget().ConfigureAwait(false))
+                {
+                    throw new InvalidOperationException("The Graylog endpoint could not be resolved.");
+                }
 
-            UdpClient client = _client ?? throw new InvalidOperationException("The UDP client could not be initialized.");
-            IPEndPoint endpoint = _ipEndPoint ?? throw new InvalidOperationException("The Graylog endpoint could not be initialized.");
-            await client.SendAsync(payload, payload.Length, endpoint).ConfigureAwait(false);
+                UdpClient client = _client ?? throw new InvalidOperationException("The UDP client could not be initialized.");
+                IPEndPoint endpoint = _ipEndPoint ?? throw new InvalidOperationException("The Graylog endpoint could not be initialized.");
+                await client.SendAsync(payload, payload.Length, endpoint).ConfigureAwait(false);
+            }
+            finally
+            {
+                _sendLock.Release();
+            }
         }
 
         public void Dispose() => _client?.Dispose();

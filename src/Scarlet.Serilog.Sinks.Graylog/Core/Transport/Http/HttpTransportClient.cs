@@ -11,13 +11,14 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
     {
         private const string _defaultHttpUriPath = "gelf";
 
-        private HttpClient? _httpClient;
+        private readonly Lazy<HttpClient> _httpClient;
 
         private readonly GraylogSinkOptionsBase options;
 
         public HttpTransportClient(GraylogSinkOptionsBase options)
         {
             this.options = options;
+            _httpClient = new Lazy<HttpClient>(CreateConfiguredHttpClient);
         }
 
         protected virtual HttpClient CreateHttpClient() => new();
@@ -58,23 +59,20 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
             }
         }
 
-        private void EnsureHttpClient()
+        private HttpClient CreateConfiguredHttpClient()
         {
-            if (_httpClient == null)
-            {
-                _httpClient = CreateHttpClient();
-
-                ConfigureHttpClient(_httpClient);
-            }
+            HttpClient httpClient = CreateHttpClient();
+            ConfigureHttpClient(httpClient);
+            return httpClient;
         }
 
         public async Task Send(string message)
         {
-            EnsureHttpClient();
+            HttpClient httpClient = _httpClient.Value;
 
             var content = new StringContent(message, Encoding.UTF8, "application/json");
 
-            HttpResponseMessage result = await _httpClient!.PostAsync(_defaultHttpUriPath, content).ConfigureAwait(false);
+            HttpResponseMessage result = await httpClient.PostAsync(_defaultHttpUriPath, content).ConfigureAwait(false);
 
             // Throwing rather than swallowing is what lets Serilog's batching sink see the failure
             // and retry the batch; the unbatched path reports it through GraylogSink.Emit's
@@ -92,7 +90,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
         {
             if (disposing)
             {
-                _httpClient?.Dispose();
+                if (_httpClient.IsValueCreated)
+                {
+                    _httpClient.Value.Dispose();
+                }
             }
         }
     }

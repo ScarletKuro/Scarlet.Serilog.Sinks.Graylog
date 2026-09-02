@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Security;
 using System.Net.Sockets;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
@@ -17,6 +18,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
 
         private readonly GraylogSinkOptionsBase _options;
         private readonly IDnsInfoProvider _dnsInfoProvider;
+        private readonly SemaphoreSlim _sendLock = new(1, 1);
         private TcpClient? _client;
 
         /// <inheritdoc />
@@ -30,29 +32,37 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
         /// <inheritdoc />
         public async Task Send(byte[] payload)
         {
-            Stream stream = await EnsureConnection().ConfigureAwait(false)
-                ?? throw new InvalidOperationException("The Graylog endpoint could not be resolved.");
+            await _sendLock.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                Stream stream = await EnsureConnection().ConfigureAwait(false);
 
 #if !NET
-            await stream.WriteAsync(payload, 0, payload.Length).ConfigureAwait(false);
+                await stream.WriteAsync(payload, 0, payload.Length).ConfigureAwait(false);
 #else
-            await stream.WriteAsync(payload).ConfigureAwait(false);
+                await stream.WriteAsync(payload).ConfigureAwait(false);
 #endif
 
-            await stream.FlushAsync().ConfigureAwait(false);
+                await stream.FlushAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                _sendLock.Release();
+            }
         }
 
-        private async Task<Stream?> EnsureConnection()
+        private async Task<Stream> EnsureConnection()
         {
-            if (_client == null || !_client.Connected)
+            if (_client != null && _client.Connected && _stream != null)
             {
-                await Connect().ConfigureAwait(false);
+                return _stream;
             }
 
-            return _stream;
+            CloseConnection();
+            return await Connect().ConfigureAwait(false);
         }
 
-        private async Task Connect()
+        private async Task<Stream> Connect()
         {
             string hostNameOrAddress = _options.HostnameOrAddress
                 ?? throw new InvalidOperationException("The HostnameOrAddress value must be set.");
@@ -60,36 +70,53 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
             if (_address == default)
             {
                 SelfLog.WriteLine("IP address could not be resolved.");
-                return;
+                throw new InvalidOperationException("The Graylog endpoint could not be resolved.");
             }
 
             int port = _options.Port.GetValueOrDefault(DefaultPort);
             string? sslHost = _options.UseSsl ? hostNameOrAddress : null;
 
-            _client ??= new TcpClient(_address.AddressFamily);
-            await _client.ConnectAsync(_address, port).ConfigureAwait(false);
-
-            _stream = _client.GetStream();
-
-            if (!string.IsNullOrWhiteSpace(sslHost))
+            var client = new TcpClient(_address.AddressFamily);
+            try
             {
-                var _sslStream = new SslStream(_stream, false);
+                await client.ConnectAsync(_address, port).ConfigureAwait(false);
+                Stream stream = client.GetStream();
 
-                await _sslStream.AuthenticateAsClientAsync(sslHost).ConfigureAwait(false);
-
-                if (_sslStream.RemoteCertificate != null)
+                if (!string.IsNullOrWhiteSpace(sslHost))
                 {
-                    SelfLog.WriteLine("Remote cert was issued to {0} and is valid from {1} until {2}.",
-                        _sslStream.RemoteCertificate.Subject,
-                        _sslStream.RemoteCertificate.GetEffectiveDateString(),
-                        _sslStream.RemoteCertificate.GetExpirationDateString());
+                    var sslStream = new SslStream(stream, false);
+                    await sslStream.AuthenticateAsClientAsync(sslHost).ConfigureAwait(false);
+                    stream = sslStream;
 
-                    _stream = _sslStream;
-                } else
-                {
-                    SelfLog.WriteLine("Remote certificate is null.");
+                    if (sslStream.RemoteCertificate != null)
+                    {
+                        SelfLog.WriteLine("Remote cert was issued to {0} and is valid from {1} until {2}.",
+                            sslStream.RemoteCertificate.Subject,
+                            sslStream.RemoteCertificate.GetEffectiveDateString(),
+                            sslStream.RemoteCertificate.GetExpirationDateString());
+                    } else
+                    {
+                        SelfLog.WriteLine("Remote certificate is null.");
+                    }
                 }
+
+                _client = client;
+                _stream = stream;
+                return stream;
             }
+            catch
+            {
+                client.Dispose();
+                throw;
+            }
+        }
+
+        private void CloseConnection()
+        {
+            _stream?.Dispose();
+            _stream = null;
+            _client?.Dispose();
+            _client = null;
         }
 
         /// <inheritdoc />
@@ -103,8 +130,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
         {
             if (disposing)
             {
-                _stream?.Dispose();
-                _client?.Dispose();
+                CloseConnection();
             }
         }
     }

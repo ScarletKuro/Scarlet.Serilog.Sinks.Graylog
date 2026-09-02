@@ -2,6 +2,7 @@ using NSubstitute;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp;
 using System;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -58,6 +59,38 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Tcp
 
             Assert.Equal(payload, received);
             await dnsInfoProvider.Received(1).GetIpAddress("graylog.example.org");
+        }
+
+        [Fact]
+        public async Task Send_ConcurrentCallsKeepNullTerminatedFramesIntact()
+        {
+            const int messageCount = 16;
+            using var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            var dnsInfoProvider = Substitute.For<IDnsInfoProvider>();
+            dnsInfoProvider.GetIpAddress("graylog.example.org").Returns(Task.FromResult<IPAddress?>(IPAddress.Loopback));
+
+            using var target = new TcpTransportClient(new GraylogSinkOptions
+            {
+                HostnameOrAddress = "graylog.example.org",
+                Port = port
+            }, dnsInfoProvider);
+
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(10));
+            ValueTask<TcpClient> accepting = listener.AcceptTcpClientAsync(timeout.Token);
+
+            await Task.WhenAll(Enumerable.Range(1, messageCount)
+                .Select(value => target.Send(new byte[] { (byte)value, 0 })));
+
+            using TcpClient connection = await accepting;
+            byte[] received = new byte[messageCount * 2];
+            await connection.GetStream().ReadExactlyAsync(received, timeout.Token);
+
+            Assert.All(Enumerable.Range(0, messageCount), index => Assert.Equal(0, received[(index * 2) + 1]));
+            Assert.Equal(Enumerable.Range(1, messageCount).Select(value => (byte)value),
+                received.Where((_, index) => index % 2 == 0).OrderBy(value => value));
         }
 
         [Fact]
