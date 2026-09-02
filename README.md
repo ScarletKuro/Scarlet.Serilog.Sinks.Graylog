@@ -94,6 +94,33 @@ new GraylogSinkOptions
       }
 ```
 
+## TLS
+
+TLS is supported by the HTTP and TCP transports. Set `UseSsl` to `true` and configure the
+matching TLS-enabled Graylog input. Use a hostname that matches the server certificate; do not use
+an IP address unless that IP address is included in the certificate's subject alternative names.
+
+```csharp
+new GraylogSinkOptions
+{
+    HostnameOrAddress = "https://graylog.example.org",
+    Port = 12201,
+    TransportType = TransportType.Http,
+    UseSsl = true
+};
+```
+
+For TCP, use the same `UseSsl = true` setting with `TransportType.Tcp` and a hostname such as
+`graylog.example.org`.
+
+The certificate and private-key file paths shown in Graylog's input configuration belong on the
+Graylog server. The sink validates the server certificate against the client machine's normal
+operating-system trust store. Install a private CA there before connecting to an internally signed
+Graylog certificate.
+
+Client certificates (mutual TLS) are not currently supported. GELF over UDP does not support TLS;
+use TCP or HTTP when encryption in transit is required.
+
 All options you can see at
 [`GraylogSinkOptions.cs`](https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/blob/master/src/Scarlet.Serilog.Sinks.Graylog/GraylogSinkOptions.cs)
 (which adds `Batching`) and its base
