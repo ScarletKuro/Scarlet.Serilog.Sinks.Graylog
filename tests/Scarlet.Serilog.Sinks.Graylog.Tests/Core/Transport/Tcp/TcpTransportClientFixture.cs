@@ -14,6 +14,42 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Tcp
     public class TcpTransportClientFixture
     {
         [Fact]
+        public async Task Send_AfterAConnectionFailure_ReconnectsWithANewClient()
+        {
+            int port;
+            using (var portReservation = new TcpListener(IPAddress.Loopback, 0))
+            {
+                portReservation.Start();
+                port = ((IPEndPoint)portReservation.LocalEndpoint).Port;
+            }
+
+            var dnsInfoProvider = Substitute.For<IDnsInfoProvider>();
+            dnsInfoProvider.GetIpAddress("graylog.example.org").Returns(Task.FromResult<IPAddress?>(IPAddress.Loopback));
+            using var target = new TcpTransportClient(new GraylogSinkOptions
+            {
+                HostnameOrAddress = "graylog.example.org",
+                Port = port
+            }, dnsInfoProvider);
+
+            await Assert.ThrowsAnyAsync<SocketException>(() => target.Send(new byte[] { 1 }));
+
+            using var listener = new TcpListener(IPAddress.Loopback, port);
+            listener.Start();
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(10));
+            ValueTask<TcpClient> accepting = listener.AcceptTcpClientAsync(timeout.Token);
+
+            byte[] payload = { 2, 0 };
+            await target.Send(payload);
+
+            using TcpClient connection = await accepting;
+            byte[] received = new byte[payload.Length];
+            await connection.GetStream().ReadExactlyAsync(received, timeout.Token);
+
+            Assert.Equal(payload, received);
+        }
+
+        [Fact]
         public async Task Send_WhenEndpointCannotBeResolved_ThrowsAClearError()
         {
             var dnsInfoProvider = Substitute.For<IDnsInfoProvider>();

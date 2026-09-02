@@ -45,6 +45,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
 
                 await stream.FlushAsync().ConfigureAwait(false);
             }
+            catch
+            {
+                // A failed write leaves TcpClient.Connected unreliable; force a clean reconnect next time.
+                CloseConnection();
+                throw;
+            }
             finally
             {
                 _sendLock.Release();
