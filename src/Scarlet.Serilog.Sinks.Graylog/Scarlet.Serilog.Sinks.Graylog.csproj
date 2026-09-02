@@ -16,7 +16,7 @@
         <PackageIcon>serilog-sink-nuget.png</PackageIcon>
 
         <PackageTags>Serilog Sink Graylog Batching Scarlet</PackageTags>
-        <Copyright>Copyright © Anton Volkov and Contributors; fork maintained by ScarletKuro</Copyright>
+        <Copyright>Copyright © 2016 Anton Volkov and Contributors, © 2026 ScarletKuro and Contributors</Copyright>
         <NeutralLanguage>en</NeutralLanguage>
 
         <Version>4.0.0</Version>
