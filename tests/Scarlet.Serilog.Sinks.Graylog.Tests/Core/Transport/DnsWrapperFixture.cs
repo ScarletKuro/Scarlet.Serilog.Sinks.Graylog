@@ -32,6 +32,16 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport
             Assert.Equal(IPAddress.Loopback, actual);
         }
 
+        [Fact]
+        public async Task GetIpAddress_ReturnsIpv6WhenNoIpv4AddressIsAvailable()
+        {
+            var target = new DnsWrapper();
+
+            IPAddress? actual = await target.GetIpAddress(IPAddress.IPv6Loopback.ToString());
+
+            Assert.Equal(IPAddress.IPv6Loopback, actual);
+        }
+
         [Theory]
         [InlineData("")]
         [InlineData(null)]

@@ -41,7 +41,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport
             }
 
             var addresses = await GetHostAddresses(hostNameOrAddress).ConfigureAwait(false);
-            var result = addresses.FirstOrDefault(c => c.AddressFamily == AddressFamily.InterNetwork);
+            // Prefer IPv4 for backwards compatibility, but use IPv6 when it is the only route.
+            var result = addresses.FirstOrDefault(c => c.AddressFamily == AddressFamily.InterNetwork)
+                ?? addresses.FirstOrDefault(c => c.AddressFamily == AddressFamily.InterNetworkV6);
             return result;
         }
     }

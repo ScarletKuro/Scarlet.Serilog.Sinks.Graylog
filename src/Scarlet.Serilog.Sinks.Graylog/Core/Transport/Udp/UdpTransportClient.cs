@@ -17,28 +17,34 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
 
         private readonly GraylogSinkOptionsBase _options;
         private readonly IDnsInfoProvider _dnsInfoProvider;
-        private readonly UdpClient _client;
+        private UdpClient? _client;
 
         public UdpTransportClient(GraylogSinkOptionsBase options, IDnsInfoProvider dnsInfoProvider)
         {
             _options = options;
             _dnsInfoProvider = dnsInfoProvider;
 
-            _client = new UdpClient();
         }
 
-        private async Task EnsureTarget()
+        private async Task<bool> EnsureTarget()
         {
-            if (_ipEndPoint == null)
+            if (_ipEndPoint != null)
             {
-                var ipAddress = await _dnsInfoProvider.GetIpAddress(_options.HostnameOrAddress!).ConfigureAwait(false);
-                if (ipAddress == default)
-                {
-                    SelfLog.WriteLine("IP address could not be resolved.");
-                    return;
-                }
-                _ipEndPoint = new IPEndPoint(ipAddress, _options.Port.GetValueOrDefault());
+                return true;
             }
+
+            string hostNameOrAddress = _options.HostnameOrAddress
+                ?? throw new InvalidOperationException("The HostnameOrAddress value must be set.");
+            var ipAddress = await _dnsInfoProvider.GetIpAddress(hostNameOrAddress).ConfigureAwait(false);
+            if (ipAddress == default)
+            {
+                SelfLog.WriteLine("IP address could not be resolved.");
+                return false;
+            }
+
+            _ipEndPoint = new IPEndPoint(ipAddress, _options.Port.GetValueOrDefault());
+            _client = new UdpClient(ipAddress.AddressFamily);
+            return true;
         }
 
         /// <summary>
@@ -47,11 +53,16 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
         /// <param name="payload">The payload.</param>
         public async Task Send(byte[] payload)
         {
-            await EnsureTarget().ConfigureAwait(false);
+            if (!await EnsureTarget().ConfigureAwait(false))
+            {
+                throw new InvalidOperationException("The Graylog endpoint could not be resolved.");
+            }
 
-            await _client.SendAsync(payload, payload.Length, _ipEndPoint).ConfigureAwait(false);
+            UdpClient client = _client ?? throw new InvalidOperationException("The UDP client could not be initialized.");
+            IPEndPoint endpoint = _ipEndPoint ?? throw new InvalidOperationException("The Graylog endpoint could not be initialized.");
+            await client.SendAsync(payload, payload.Length, endpoint).ConfigureAwait(false);
         }
 
-        public void Dispose() => _client.Dispose();
+        public void Dispose() => _client?.Dispose();
     }
 }

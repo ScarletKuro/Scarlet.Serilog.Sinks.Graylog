@@ -17,7 +17,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
 
         private readonly GraylogSinkOptionsBase _options;
         private readonly IDnsInfoProvider _dnsInfoProvider;
-        private readonly TcpClient _client;
+        private TcpClient? _client;
 
         /// <inheritdoc />
         public TcpTransportClient(GraylogSinkOptionsBase options, IDnsInfoProvider dnsInfoProvider)
@@ -25,34 +25,38 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
             _options = options;
             _dnsInfoProvider = dnsInfoProvider;
 
-            _client = new TcpClient();
         }
 
         /// <inheritdoc />
         public async Task Send(byte[] payload)
         {
-            await EnsureConnection().ConfigureAwait(false);
+            Stream stream = await EnsureConnection().ConfigureAwait(false)
+                ?? throw new InvalidOperationException("The Graylog endpoint could not be resolved.");
 
 #if !NET
-            await _stream!.WriteAsync(payload, 0, payload.Length).ConfigureAwait(false);
+            await stream.WriteAsync(payload, 0, payload.Length).ConfigureAwait(false);
 #else
-            await _stream!.WriteAsync(payload).ConfigureAwait(false);
+            await stream.WriteAsync(payload).ConfigureAwait(false);
 #endif
 
-            await _stream.FlushAsync().ConfigureAwait(false);
+            await stream.FlushAsync().ConfigureAwait(false);
         }
 
-        private async Task EnsureConnection()
+        private async Task<Stream?> EnsureConnection()
         {
-            if (!_client.Connected)
+            if (_client == null || !_client.Connected)
             {
                 await Connect().ConfigureAwait(false);
             }
+
+            return _stream;
         }
 
         private async Task Connect()
         {
-            IPAddress? _address = await _dnsInfoProvider.GetIpAddress(_options.HostnameOrAddress!).ConfigureAwait(false);
+            string hostNameOrAddress = _options.HostnameOrAddress
+                ?? throw new InvalidOperationException("The HostnameOrAddress value must be set.");
+            IPAddress? _address = await _dnsInfoProvider.GetIpAddress(hostNameOrAddress).ConfigureAwait(false);
             if (_address == default)
             {
                 SelfLog.WriteLine("IP address could not be resolved.");
@@ -60,8 +64,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
             }
 
             int port = _options.Port.GetValueOrDefault(DefaultPort);
-            string? sslHost = _options.UseSsl ? _options.HostnameOrAddress : null;
+            string? sslHost = _options.UseSsl ? hostNameOrAddress : null;
 
+            _client ??= new TcpClient(_address.AddressFamily);
             await _client.ConnectAsync(_address, port).ConfigureAwait(false);
 
             _stream = _client.GetStream();
@@ -99,7 +104,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
             if (disposing)
             {
                 _stream?.Dispose();
-                _client.Dispose();
+                _client?.Dispose();
             }
         }
     }
