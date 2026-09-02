@@ -1,5 +1,3 @@
-#nullable enable
-
 using NSubstitute;
 using Scarlet.Serilog.Sinks.Graylog.Tests.Fakes;
 using Serilog;

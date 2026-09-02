@@ -38,7 +38,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
             //act
             LogEvent logEvent = LogEventSource.GetSimpleLogEvent(date);
             var actual = messageBuilder.Build(logEvent);
-            string actualHost = actual["host"].AsValue().ToString();
+            var host = actual["host"];
+            Assert.NotNull(host);
+            string actualHost = host.AsValue().ToString();
 
             //assert
             Assert.Equal(expectedHost, actualHost);
@@ -51,7 +53,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
             //If in future this test fail then should add check for null in GelfMessageBuilder
             Assert.Throws<ArgumentNullException>(() =>
             {
-                var logEvent = new LogEvent(DateTimeOffset.Now, LogEventLevel.Information, null,
+                _ = new LogEvent(DateTimeOffset.Now, LogEventLevel.Information, null,
                     new MessageTemplate("abcdef{TestProp}", new List<MessageTemplateToken>
                     {
                         new TextToken("abcdef"),
@@ -61,8 +63,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
                     {
                         new("TestProp", new ScalarValue("zxc")),
                         new("id", new ScalarValue("asd")),
-                        new("Oo", null),
-                        new(null, null),
+                        new("Oo", null!),
+                        new(null!, null!),
                         new("StructuredProperty",
                             new StructureValue(new List<LogEventProperty>
                             {

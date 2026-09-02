@@ -1,5 +1,3 @@
-#nullable enable
-
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 using System;
 using System.Collections.Generic;

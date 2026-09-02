@@ -439,7 +439,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
     public class Bar
     {
         public int Id { get; set; }
-        public string Prop { get; set; }
+        public string? Prop { get; set; }
 
         public bool TestBarBooleanProperty { get; set; }
         public TestEnumOne EnumVal { get; set; }
@@ -451,15 +451,15 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
 
         public bool TestClassBooleanProperty { get; set; }
 
-        public string TestPropertyOne { get; set; }
+        public string? TestPropertyOne { get; set; }
 
-        public Bar Bar { get; set; }
+        public Bar? Bar { get; set; }
 
-        public string TestPropertyTwo { get; set; }
+        public string? TestPropertyTwo { get; set; }
 
-        public string TestPropertyThree { get; set; }
+        public string? TestPropertyThree { get; set; }
         public DateTime SomeTestDateTime { get; set; }
-        public string Type { get; set; }
+        public string? Type { get; set; }
         public TestEnumOne EnumVal { get; set; }
     }
 }

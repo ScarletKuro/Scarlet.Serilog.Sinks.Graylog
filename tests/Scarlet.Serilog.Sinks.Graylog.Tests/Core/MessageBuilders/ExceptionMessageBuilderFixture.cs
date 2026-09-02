@@ -15,7 +15,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
 
             ExceptionMessageBuilder exceptionBuilder = new("localhost", options);
 
-            Exception testExc = null;
+            Exception? testExc = null;
 
             try
             {

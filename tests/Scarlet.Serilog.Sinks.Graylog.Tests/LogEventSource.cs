@@ -1,5 +1,3 @@
-#nullable enable
-
 using Serilog.Events;
 using Serilog.Parsing;
 using System;
@@ -85,7 +83,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
                 });
         }
 
-        public static LogEvent GetExceptionLogEvent(DateTimeOffset date, Exception testExc)
+        public static LogEvent GetExceptionLogEvent(DateTimeOffset date, Exception? testExc)
         {
             var logevent = new LogEvent(date, LogEventLevel.Error, testExc, new MessageTemplate("", new List<MessageTemplateToken>()),
                 new List<LogEventProperty>(new List<LogEventProperty>()));

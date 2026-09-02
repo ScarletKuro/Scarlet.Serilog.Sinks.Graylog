@@ -1,5 +1,3 @@
-#nullable enable
-
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 using Scarlet.Serilog.Sinks.Graylog.Tests.Fakes;
 using Serilog.Configuration;

@@ -49,14 +49,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         public void CanReadHostPropertyConfiguration()
         {
             //arrange
-            //
-            IConfigurationRoot configuration;
-            using (Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream("Scarlet.Serilog.Sinks.Graylog.Tests.Configurations.AppSettingsWithGraylogSinkContainingHostProperty.json"))
-            {
-                configuration = new ConfigurationBuilder()
-                    .AddJsonStream(s)
-                    .Build();
-            }
+            IConfigurationRoot configuration = ConfigurationFromResource(
+                "Scarlet.Serilog.Sinks.Graylog.Tests.Configurations.AppSettingsWithGraylogSinkContainingHostProperty.json");
+
             Log.Logger = new LoggerConfiguration()
                 .ReadFrom.Configuration(configuration)
                 .CreateLogger();
@@ -122,19 +117,29 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         [Fact]
         public void CanReadBatchedConfiguration()
         {
-            IConfigurationRoot configuration;
-            using (Stream s = Assembly.GetExecutingAssembly().GetManifestResourceStream("Scarlet.Serilog.Sinks.Graylog.Tests.Configurations.AppSettingsWithBatchedGraylogSink.json"))
-            {
-                configuration = new ConfigurationBuilder()
-                    .AddJsonStream(s)
-                    .Build();
-            }
+            IConfigurationRoot configuration = ConfigurationFromResource(
+                "Scarlet.Serilog.Sinks.Graylog.Tests.Configurations.AppSettingsWithBatchedGraylogSink.json");
 
             using var logger = new LoggerConfiguration()
                 .ReadFrom.Configuration(configuration)
                 .CreateLogger();
 
             Assert.NotNull(logger);
+        }
+
+        /// <summary>
+        /// Reads an embedded JSON configuration file. <see cref="Assembly.GetManifestResourceStream(string)"/>
+        /// returns null when the resource is not embedded, which would otherwise surface as an
+        /// unexplained NullReferenceException if one of the files were renamed.
+        /// </summary>
+        private static IConfigurationRoot ConfigurationFromResource(string resourceName)
+        {
+            using Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName)
+                ?? throw new InvalidOperationException($"Embedded resource '{resourceName}' was not found.");
+
+            return new ConfigurationBuilder()
+                .AddJsonStream(stream)
+                .Build();
         }
 
         private static GraylogSinkOptions OptionsFor(ITransport transport)

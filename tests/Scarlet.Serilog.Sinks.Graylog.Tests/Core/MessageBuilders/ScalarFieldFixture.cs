@@ -1,5 +1,3 @@
-#nullable enable
-
 using Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders;
 using Serilog.Events;
 using System;
