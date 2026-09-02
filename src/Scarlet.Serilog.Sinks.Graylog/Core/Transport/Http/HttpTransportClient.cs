@@ -9,7 +9,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
 {
     public class HttpTransportClient : ITransportClient<string>
     {
-        private const string _defaultHttpUriPath = "/gelf";
+        private const string _defaultHttpUriPath = "gelf";
 
         private HttpClient? _httpClient;
 
@@ -37,6 +37,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
             if (options.UseSsl)
             {
                 builder.Scheme = "https";
+            }
+
+            // A trailing slash makes a configured proxy path a base directory for the GELF endpoint.
+            if (!builder.Path.EndsWith("/", StringComparison.Ordinal))
+            {
+                builder.Path += "/";
             }
 
             httpClient.BaseAddress = builder.Uri;

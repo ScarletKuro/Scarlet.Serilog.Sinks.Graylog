@@ -131,12 +131,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
         }
 
         /// <summary>
-        /// A path on <c>HostnameOrAddress</c> reaches the base address but not the request: the client
-        /// posts to the rooted path "/gelf", which replaces whatever path the base address carried.
-        /// Characterization only - this documents today's behaviour rather than endorsing it.
+        /// A path on <c>HostnameOrAddress</c> is retained so a reverse proxy can route GELF requests.
         /// </summary>
         [Fact]
-        public async Task Send_WhenTheHostnameCarriesAPath_ThatPathIsNotUsedForTheRequest()
+        public async Task Send_WhenTheHostnameCarriesAPath_PostsBelowThatPath()
         {
             using var target = new ProbeHttpTransportClient(OptionsFor("http://logs.example.org/testgelf"));
 
@@ -146,7 +144,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
 
             Assert.NotNull(request);
             Assert.NotNull(request.RequestUri);
-            Assert.Equal("http://logs.example.org:12201/gelf", request.RequestUri.ToString());
+            Assert.Equal("http://logs.example.org:12201/testgelf/gelf", request.RequestUri.ToString());
         }
 
         [Fact]
