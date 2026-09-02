@@ -85,3 +85,38 @@ jobs:
           path: |
             artifacts/*.nupkg
             artifacts/*.snupkg
+
+  aot:
+    name: Native AOT
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The harness is net10.0 only, so it needs just the one SDK.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # ILC shells out to clang and links against zlib.
+      - name: Install Native AOT prerequisites
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+
+      # Analyzers cannot prove AOT compatibility on their own, and 'dotnet build -t:Publish' is not
+      # equivalent to 'dotnet publish' - only a real publish runs ILC over the whole graph. The harness
+      # sets TreatWarningsAsErrors, so any IL2xxx/IL3xxx from the sink or Serilog fails this job.
+      - name: Publish and run (default)
+        run: |
+          dotnet publish tests/Scarlet.Serilog.Sinks.Graylog.AotHarness -c Release -r linux-x64
+          ./tests/Scarlet.Serilog.Sinks.Graylog.AotHarness/bin/Release/net10.0/linux-x64/publish/Scarlet.Serilog.Sinks.Graylog.AotHarness
+
+      # The strict run is the one that proves something: with reflection-based serialization switched off
+      # the sink has to carry every value on its reflection-free path, so it cannot pass by accident on
+      # reflection metadata that happened to survive trimming.
+      - name: Publish and run (reflection-based serialization disabled)
+        run: |
+          dotnet publish tests/Scarlet.Serilog.Sinks.Graylog.AotHarness -c Release -r linux-x64 \
+            -p:JsonSerializerIsReflectionEnabledByDefault=false
+          ./tests/Scarlet.Serilog.Sinks.Graylog.AotHarness/bin/Release/net10.0/linux-x64/publish/Scarlet.Serilog.Sinks.Graylog.AotHarness

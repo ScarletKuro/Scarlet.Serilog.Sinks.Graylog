@@ -5,6 +5,10 @@
     <PropertyGroup>
         <TargetFrameworks>net10.0;net9.0;net8.0;net471;net462;netstandard2.0</TargetFrameworks>
         <Nullable>enable</Nullable>
+        <!--Enables the trimming, single-file and AOT analyzers, and marks the assembly trimmable.
+            Conditional because these are unsupported on the .NET Framework and netstandard2.0 targets,
+            which would otherwise fail with NETSDK1195.-->
+        <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</IsAotCompatible>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
         <WarningsAsErrors/>
         <PackageId>Scarlet.Serilog.Sinks.Graylog</PackageId>
@@ -35,7 +39,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Serilog" Version="4.2.0"/>
+        <PackageReference Include="Serilog" Version="4.3.1"/>
     </ItemGroup>
 
     <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework'">

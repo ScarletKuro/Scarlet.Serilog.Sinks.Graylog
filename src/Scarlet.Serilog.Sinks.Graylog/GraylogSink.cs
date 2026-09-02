@@ -6,6 +6,7 @@ using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Scarlet.Serilog.Sinks.Graylog
@@ -20,10 +21,13 @@ namespace Scarlet.Serilog.Sinks.Graylog
     /// <c>LoggerSinkConfiguration.Sink(IBatchedLogEventSink, BatchingOptions, ...)</c>, depending on
     /// <see cref="GraylogSinkOptions.Batching"/>.
     /// <para>
-    /// The exception policy differs between the two paths, deliberately: <see cref="Emit"/> is
-    /// fire-and-forget and reports failures to <see cref="SelfLog"/>, while
-    /// <see cref="EmitBatchAsync"/> lets exceptions propagate because Serilog's batching
-    /// infrastructure owns diagnostics, back-off and retry.
+    /// The exception policy differs between the two paths, because their contracts do.
+    /// <see cref="EmitBatchAsync"/> is asynchronous, so it lets everything propagate to Serilog's
+    /// batching infrastructure, which owns diagnostics, back-off and retry. <see cref="Emit"/> is a
+    /// synchronous <c>void</c>, so it can only propagate what fails synchronously - which it does,
+    /// rather than swallowing it - and reports a failed asynchronous send to <see cref="SelfLog"/>,
+    /// having nowhere else to put it. It must not block to do better than that; see the remarks on
+    /// <see cref="Emit"/>.
     /// </para>
     /// </remarks>
     public sealed class GraylogSink : ILogEventSink, IBatchedLogEventSink, IDisposable
@@ -50,22 +54,30 @@ namespace Scarlet.Serilog.Sinks.Graylog
         }
 
         /// <inheritdoc />
+        /// <remarks>
+        /// The send is started and not waited on. Blocking here - <c>.Result</c>, <c>.Wait()</c> or
+        /// <c>.GetAwaiter().GetResult()</c> - deadlocks any caller with a single-threaded
+        /// synchronization context, such as a WinForms UI thread, because the continuation needs the
+        /// very thread that is blocked. See serilog-contrib/serilog-sinks-graylog#102.
+        /// <para>
+        /// Building the GELF payload happens synchronously, so a bad event, unusable serializer options
+        /// or a transport that cannot be constructed throws out of this method and reaches Serilog,
+        /// which reports it against this sink or, for an <c>AuditTo</c> logger, surfaces it to the
+        /// caller. Only a failure of the transport's asynchronous send is left, and a synchronous void
+        /// method has nowhere to report that, so it goes to <see cref="SelfLog"/>. Use
+        /// <see cref="GraylogSinkOptions.Batching"/> if delivery failures need to be observable, since
+        /// that path propagates them to Serilog's batching infrastructure, which also retries.
+        /// </para>
+        /// </remarks>
         public void Emit(LogEvent logEvent)
         {
-            try
-            {
-                SendAsync(logEvent).ContinueWith(
-                    task =>
-                    {
-                        SelfLog.WriteLine("Oops something going wrong {0}", task.Exception);
-                    },
-                    TaskContinuationOptions.OnlyOnFaulted);
-            } catch (Exception exc)
-            {
-                // Materialising the lazy transport or converter can fail synchronously, for example
-                // TransportType.Custom without a TransportFactory.
-                SelfLog.WriteLine("Oops something going wrong {0}", exc);
-            }
+            SendAsync(logEvent).ContinueWith(
+                static task => SelfLog.WriteLine("Could not send a log event to Graylog: {0}", task.Exception?.GetBaseException()),
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted,
+                // Never the ambient scheduler: on a UI thread that would queue the diagnostic behind
+                // whatever the application is doing.
+                TaskScheduler.Default);
         }
 
         /// <inheritdoc />

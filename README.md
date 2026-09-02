@@ -161,6 +161,72 @@ In `appsettings.json` (note that `TimeSpan` values use `TimeSpan.Parse` format, 
 Batching adds retry: a batch that fails is retried for up to `RetryTimeLimit` (10 minutes by
 default). Note that once `QueueLimit` is reached further events are **dropped**, not throttled.
 
+## Native AOT and trimming
+
+Native AOT and trimming are supported on `net8.0` and later. Nothing needs configuring — publish with
+`<PublishAot>true</PublishAot>` and log as usual:
+
+```xml
+<PropertyGroup>
+  <PublishAot>true</PublishAot>
+</PropertyGroup>
+```
+
+The sink builds every GELF field without reflection, so it works with reflection-based
+`System.Text.Json` serialization switched off. The assembly is marked trimmable and is built with the
+trim, single-file and AOT analyzers enabled; CI publishes a harness with `PublishAot` and asserts the
+payloads, so compatibility is verified end to end rather than only by analyzers.
+
+### Customizing how values are written
+
+`GraylogSinkOptions.JsonSerializerOptions` is the hook, and under AOT the customization has to arrive
+through a **`TypeInfoResolver`** — that is, a source-generated `JsonSerializerContext`. Declare the
+types whose serialization you want to control:
+
+```csharp
+[JsonSourceGenerationOptions(UseStringEnumConverter = true)]
+[JsonSerializable(typeof(LogEventLevel))]
+[JsonSerializable(typeof(OrderStatus))]
+internal partial class MyLogContext : JsonSerializerContext;
+```
+
+```csharp
+new GraylogSinkOptions
+{
+    HostnameOrAddress = "localhost",
+    Port = 12201,
+    JsonSerializerOptions = new JsonSerializerOptions
+    {
+        TypeInfoResolver = MyLogContext.Default
+    }
+}
+```
+
+Property values whose type the resolver covers are serialized through it; everything else is written
+directly, matching `System.Text.Json`'s own formatting.
+
+Adding a converter to `JsonSerializerOptions.Converters` **without** also supplying a resolver has no
+effect under AOT — applying a converter needs a contract, and building one from nothing requires
+reflection. It does work when running on a JIT runtime, which makes it easy to miss, so route
+customization through the context above. If you do add converters, use the generic
+`JsonStringEnumConverter<TEnum>`; the non-generic `JsonStringEnumConverter` is itself annotated
+`RequiresDynamicCode`.
+
+Two defaults worth knowing:
+
+- **Enums are written as numbers**, which is what `System.Text.Json` does by default. Use
+  `UseStringEnumConverter` on the context, as above, for names.
+- A `DateTimeOffset`, or a `DateTime` with `DateTimeKind.Local`, may write the `+` in its UTC offset
+  literally rather than as a JSON unicode escape. Different bytes, same string, same instant.
+
+`nint`, `nuint`, and a `Type` or `MemberInfo` captured with `{@Property}` are written as well; plain
+`System.Text.Json` rejects all four.
+
+### Requirements
+
+- Configure the sink **in code**. `ReadFrom.Configuration` (`Serilog.Settings.Configuration`) binds
+  sink arguments reflectively and is not AOT-friendly. It is not a dependency of this package.
+
 ## Credits
 
 Originally written by [Anton Volkov](https://github.com/whir1) and contributors. Licensed under the MIT License.

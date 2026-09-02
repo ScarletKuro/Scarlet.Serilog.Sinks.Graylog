@@ -25,6 +25,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
         private readonly GraylogSinkOptionsBase _options;
 
         /// <summary>
+        /// Built on first use and rebuilt if <see cref="GraylogSinkOptionsBase.JsonSerializerOptions"/> is
+        /// swapped for a different instance, since the writer caches contracts per options instance.
+        /// </summary>
+        private ScalarJsonWriter? _scalarJsonWriter;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="GelfMessageBuilder"/> class.
         /// </summary>
         /// <param name="hostName">Name of the host.</param>
@@ -86,6 +92,23 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
             return jsonObject;
         }
 
+        private ScalarJsonWriter ScalarJsonWriter
+        {
+            get
+            {
+                JsonSerializerOptions options = Options.JsonSerializerOptions;
+                ScalarJsonWriter? writer = _scalarJsonWriter;
+
+                if (writer == null || !ReferenceEquals(writer.Options, options))
+                {
+                    writer = new ScalarJsonWriter(options);
+                    _scalarJsonWriter = writer;
+                }
+
+                return writer;
+            }
+        }
+
         private void AddAdditionalField(JsonObject jObject,
                                         KeyValuePair<string, LogEventPropertyValue> property,
                                         string memberPath = "")
@@ -114,7 +137,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
                         break;
                     }
 
-                    var node = JsonSerializer.SerializeToNode(scalarValue.Value, Options.JsonSerializerOptions);
+                    var node = ScalarJsonWriter.ToJsonNode(scalarValue.Value);
 
                     jObject.Add(key, node);
 
@@ -157,10 +180,18 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
                         }
                     } else
                     {
-                        var dict = dictionaryValue.Elements.ToDictionary(k => k.Key.Value!, v => RenderPropertyValue(v.Value));
-                        var stringDictionary = JsonSerializer.SerializeToNode(dict, Options.JsonSerializerOptions);
+                        // Built directly rather than serialized from a Dictionary<object, string>: the object
+                        // key made that an untyped serialization call, which Native AOT cannot support.
+                        // Rendering the keys is also what makes the result a well-formed JSON object, since
+                        // Serilog permits primitives, the built-in scalars and enums as dictionary keys.
+                        var nested = new JsonObject();
 
-                        jObject.Add(key, stringDictionary);
+                        foreach (KeyValuePair<ScalarValue, LogEventPropertyValue> dictionaryValueElement in dictionaryValue.Elements)
+                        {
+                            nested[RenderPropertyValue(dictionaryValueElement.Key)] = RenderPropertyValue(dictionaryValueElement.Value);
+                        }
+
+                        jObject.Add(key, nested);
                     }
 
                     break;

@@ -52,7 +52,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
 
         private async Task Connect()
         {
-            IPAddress? _address = await _dnsInfoProvider.GetIpAddress(_options.HostnameOrAddress!);
+            IPAddress? _address = await _dnsInfoProvider.GetIpAddress(_options.HostnameOrAddress!).ConfigureAwait(false);
             if (_address == default)
             {
                 SelfLog.WriteLine("IP address could not be resolved.");
