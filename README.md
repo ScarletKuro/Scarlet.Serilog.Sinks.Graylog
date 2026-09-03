@@ -17,8 +17,16 @@ The package IDs, assembly names and root namespace all gained a `Scarlet.` prefi
 2. Update `using Serilog.Sinks.Graylog...;` to `using Scarlet.Serilog.Sinks.Graylog...;`.
 3. Update the `Using` array in `appsettings.json` to `"Scarlet.Serilog.Sinks.Graylog"`.
 
-`WriteTo.Graylog(...)`, `GraylogSinkOptions` and the transports all keep their names, and an
-unbatched sink behaves exactly as before.
+`WriteTo.Graylog(...)`, `GraylogSinkOptions` and the transports keep their names, but the options are
+grouped into `Message`, `Delivery`, `Udp`, `Tcp`, `Http` and `Custom` sections rather than sitting
+flat on `GraylogSinkOptions` — see
+[`GraylogSinkOptions.cs`](https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/blob/master/src/Scarlet.Serilog.Sinks.Graylog/GraylogSinkOptions.cs)
+and the [Quick start](#quick-start) below. The options object is the only registration API; there are
+no argument-based `WriteTo.Graylog(host, port, ...)` overloads.
+
+Exception detail is sent as the `_ExceptionSource`, `_ExceptionType`, `_ExceptionMessage` and
+`_StackTrace` fields. These are built onto the GELF message and are not added to the `LogEvent`, so
+they do not show up in your other sinks.
 
 ## Migrating from Serilog.Sinks.Graylog.Batching
 
@@ -144,6 +152,29 @@ All grouped options are defined in
 (including `Message`, `Delivery`, and each transport section).
 
 You can create your own implementation of transports or converter and set it to options. But maybe i'll delete this feature in the future
+
+## UDP chunking and DNS
+
+A GELF payload larger than `Udp.MaximumDatagramSize` (8192 bytes by default, gzip-compressed first
+unless `Udp.Compression` says otherwise) is split into chunks that share an 8-byte message ID.
+Graylog groups chunks by that ID and discards a partial message after 5 seconds, so the ID has to
+be unique across everything in flight at once — the sink uses 8 cryptographically random bytes per
+message, as the Graylog Go, Python and PHP clients do, and it is not configurable. GELF allows at
+most 128 chunks per message; a payload needing more is rejected with an `ArgumentException`.
+
+Because UDP has no connection to fail, a resolved host is re-resolved every
+`Udp.DnsRefreshInterval` (2 minutes by default; `null` resolves once and never again) so that a
+rotated Kubernetes Service or a DNS failover is picked up. A refresh that fails keeps delivering to
+the last address that worked. A `Host` that is already an IP literal is never resolved at all, on any
+transport.
+
+## GELF field names
+
+Serilog property names become GELF additional fields. GELF only recognises fields prefixed with `_`
+and verifies the rest against `^[\w.\-]*$`, so the sink prefixes every field and replaces any other
+character with an underscore — relevant mainly to dictionary keys, which can be arbitrary strings.
+`_id` is reserved by Graylog, so a property called `id` is written as `_id_`. Two names that end up
+identical after that are written last-wins.
 
 ## Batching
 

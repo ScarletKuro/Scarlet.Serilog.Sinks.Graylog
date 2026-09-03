@@ -49,6 +49,8 @@ namespace Scarlet.Serilog.Sinks.Graylog
                 throw new ArgumentNullException(nameof(options));
             }
 
+            GraylogSinkOptionsValidator.Validate(options);
+
             ISinkComponentsBuilder sinkComponentsBuilder = new SinkComponentsBuilder(options);
 
             var jsonSerializerOptions = options.Message.JsonSerializerOptions ?? new JsonSerializerOptions(JsonSerializerDefaults.General);

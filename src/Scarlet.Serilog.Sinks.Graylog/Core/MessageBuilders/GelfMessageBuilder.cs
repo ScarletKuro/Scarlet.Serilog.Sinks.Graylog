@@ -5,7 +5,6 @@ using Scarlet.Serilog.Sinks.Graylog.Core.Helpers;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -68,16 +67,28 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
                 jsonObject.Add("full_message", message);
             }
 
+            // Collected once. Re-running the token query inside the loop made this quadratic in
+            // properties times template tokens, and allocated two enumerators and a closure per property.
+            HashSet<string>? templateProperties = null;
+
+            if (Options.ExcludeMessageTemplateProperties)
+            {
+                templateProperties = new HashSet<string>(StringComparer.Ordinal);
+
+                foreach (MessageTemplateToken token in logEvent.MessageTemplate.Tokens)
+                {
+                    if (token is PropertyToken propertyToken)
+                    {
+                        templateProperties.Add(propertyToken.PropertyName);
+                    }
+                }
+            }
+
             foreach (KeyValuePair<string, LogEventPropertyValue> property in logEvent.Properties)
             {
-                if (Options.ExcludeMessageTemplateProperties)
+                if (templateProperties?.Contains(property.Key) == true)
                 {
-                    var propertyTokens = logEvent.MessageTemplate.Tokens.OfType<PropertyToken>();
-
-                    if (propertyTokens.Any(x => x.PropertyName == property.Key))
-                    {
-                        continue;
-                    }
+                    continue;
                 }
 
                 AddAdditionalField(jsonObject, property);
@@ -87,7 +98,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
             {
                 string messageTemplate = logEvent.MessageTemplate.Text;
 
-                jsonObject.Add($"_{Options.MessageTemplateFieldName}", messageTemplate);
+                AddGelfField(jsonObject, Options.MessageTemplateFieldName, messageTemplate);
             }
 
             return jsonObject;
@@ -110,6 +121,89 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
             }
         }
 
+        /// <summary>
+        /// Writes one GELF additional field, applying the naming rules the format requires.
+        /// </summary>
+        /// <param name="target">The GELF message being built.</param>
+        /// <param name="name">The field name, without the leading underscore.</param>
+        /// <param name="value">The value; <c>null</c> is written as a JSON null.</param>
+        /// <remarks>
+        /// Graylog only promotes underscore-prefixed fields to additional fields, reserves <c>_id</c>,
+        /// and accepts only <c>^[\w\.\-]*$</c> in a field name - anything else is replaced with an
+        /// underscore. Two names that collide after that are written last-wins rather than throwing,
+        /// because <c>JsonObject.Add</c> would take the whole event down with an
+        /// <see cref="ArgumentException"/>.
+        /// </remarks>
+        protected static void AddGelfField(JsonObject target, string name, JsonNode? value)
+        {
+            target[ToGelfFieldName(name)] = value;
+        }
+
+        private static string ToGelfFieldName(string name)
+        {
+            // GELF reserves _id, so a property called 'id' has to move out of the way.
+            if (name.Equals("id", StringComparison.OrdinalIgnoreCase))
+            {
+                name = "id_";
+            }
+
+            string sanitized = SanitizeFieldName(name);
+
+            return sanitized.StartsWith("_", StringComparison.Ordinal)
+                ? sanitized
+                : $"_{sanitized}";
+        }
+
+        /// <summary>
+        /// Replaces every character GELF does not allow in a field name with an underscore.
+        /// </summary>
+        /// <remarks>
+        /// Written as a scan rather than a <c>Regex</c> so the sink keeps no regular-expression
+        /// dependency on the Native AOT path, and so the overwhelmingly common case - a name that is
+        /// already valid - allocates nothing.
+        /// </remarks>
+        private static string SanitizeFieldName(string name)
+        {
+            int firstInvalid = -1;
+
+            for (int i = 0; i < name.Length; i++)
+            {
+                if (!IsAllowedInFieldName(name[i]))
+                {
+                    firstInvalid = i;
+                    break;
+                }
+            }
+
+            if (firstInvalid < 0)
+            {
+                return name;
+            }
+
+            char[] characters = name.ToCharArray();
+
+            for (int i = firstInvalid; i < characters.Length; i++)
+            {
+                if (!IsAllowedInFieldName(characters[i]))
+                {
+                    characters[i] = '_';
+                }
+            }
+
+            return new string(characters);
+        }
+
+        // Graylog verifies field names with ^[\w\.\-]*$, and its \w is ASCII-only.
+        private static bool IsAllowedInFieldName(char character)
+        {
+            return (character >= 'a' && character <= 'z')
+                || (character >= 'A' && character <= 'Z')
+                || (character >= '0' && character <= '9')
+                || character == '_'
+                || character == '.'
+                || character == '-';
+        }
+
         private void AddAdditionalField(JsonObject jObject,
                                         KeyValuePair<string, LogEventPropertyValue> property,
                                         string memberPath = "")
@@ -121,32 +215,13 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
             switch (property.Value)
             {
                 case ScalarValue scalarValue:
-                    if (key.Equals("id", StringComparison.OrdinalIgnoreCase))
-                    {
-                        key = "id_";
-                    }
-
-                    if (!key.StartsWith("_", StringComparison.OrdinalIgnoreCase))
-                    {
-                        key = $"_{key}";
-                    }
-
-                    if (scalarValue.Value == null)
-                    {
-                        jObject.Add(key, null);
-
-                        break;
-                    }
-
-                    var node = ScalarJsonWriter.ToJsonNode(scalarValue.Value);
-
-                    jObject.Add(key, node);
+                    AddGelfField(jObject, key, scalarValue.Value == null
+                        ? null
+                        : ScalarJsonWriter.ToJsonNode(scalarValue.Value));
 
                     break;
                 case SequenceValue sequenceValue:
-                    var sequenceValueString = RenderPropertyValue(sequenceValue);
-
-                    jObject.Add(key, sequenceValueString);
+                    AddGelfField(jObject, key, RenderPropertyValue(sequenceValue));
 
                     if (Options.ParseArrayValues)
                     {
@@ -192,7 +267,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
                             nested[RenderPropertyValue(dictionaryValueElement.Key)] = RenderPropertyValue(dictionaryValueElement.Value);
                         }
 
-                        jObject.Add(key, nested);
+                        AddGelfField(jObject, key, nested);
                     }
 
                     break;

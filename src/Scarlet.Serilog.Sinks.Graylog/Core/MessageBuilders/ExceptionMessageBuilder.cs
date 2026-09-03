@@ -26,27 +26,36 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
 
         /// <inheritdoc />
         /// <remarks>
-        /// Adds <c>ExceptionSource</c>, <c>ExceptionType</c>, <c>ExceptionMessage</c> and
-        /// <c>StackTrace</c> properties to the event - flattened across inner exceptions, up to
-        /// <see cref="GelfOptions.StackTraceDepth"/> levels - and then builds the message as usual.
+        /// Adds <c>_ExceptionSource</c>, <c>_ExceptionType</c>, <c>_ExceptionMessage</c> and
+        /// <c>_StackTrace</c> to the GELF message - flattened across inner exceptions, up to
+        /// <see cref="GelfOptions.StackTraceDepth"/> levels.
+        /// <para>
+        /// These are written onto the built message rather than added to the log event as properties.
+        /// Serilog hands the same <see cref="LogEvent"/> instance to every sink in the pipeline, so
+        /// adding properties to it leaked these fields into the console, file and any other sink - and
+        /// under batching it did so from the batching thread, while those sinks could be reading the
+        /// event.
+        /// </para>
         /// </remarks>
         public override JsonObject Build(LogEvent logEvent)
         {
+            JsonObject payload = base.Build(logEvent);
+
             // GelfConverter only routes to this builder when logEvent.Exception is non-null.
             Exception exception = logEvent.Exception!;
 
             Tuple<string, string?> excMessageTuple = GetExceptionMessages(exception);
             string exceptionDetail = excMessageTuple.Item1;
-            string stackTrace = excMessageTuple.Item2!;
-            string source = exception.Source!;
+            string? stackTrace = excMessageTuple.Item2;
+            string? source = exception.Source;
             string type = exception.GetType().FullName!;
 
-            logEvent.AddOrUpdateProperty(new LogEventProperty("ExceptionSource", new ScalarValue(source)));
-            logEvent.AddOrUpdateProperty(new LogEventProperty("ExceptionType", new ScalarValue(type)));
-            logEvent.AddOrUpdateProperty(new LogEventProperty("ExceptionMessage", new ScalarValue(exceptionDetail)));
-            logEvent.AddOrUpdateProperty(new LogEventProperty("StackTrace", new ScalarValue(stackTrace)));
+            AddGelfField(payload, "ExceptionSource", source);
+            AddGelfField(payload, "ExceptionType", type);
+            AddGelfField(payload, "ExceptionMessage", exceptionDetail);
+            AddGelfField(payload, "StackTrace", stackTrace);
 
-            return base.Build(logEvent);
+            return payload;
         }
 
         /// <summary>

@@ -1,13 +1,16 @@
+using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp;
-using Scarlet.Serilog.Sinks.Graylog;
 using System;
 using System.Linq;
-using TransportType = Scarlet.Serilog.Sinks.Graylog.Core.Transport.TransportType;
 
-namespace Serilog;
+namespace Scarlet.Serilog.Sinks.Graylog;
 
 internal static class GraylogSinkOptionsValidator
 {
+    // The largest payload an IPv4 UDP datagram can carry: 65535 less the 20-byte IP and 8-byte UDP
+    // headers. Anything above this can never leave the machine.
+    private const int MaximumUdpPayload = 65507;
+
     public static void Validate(GraylogSinkOptions options)
     {
         Require(options.Message, nameof(options.Message));
@@ -17,14 +20,17 @@ internal static class GraylogSinkOptionsValidator
         {
             case TransportType.Udp:
                 Require(options.Udp, nameof(options.Udp));
-                ValidateHostAndPort(options.Udp.Host, options.Udp.Port, "UDP");
+                ValidateHostAndPort(options.Udp.Host, options.Udp.Port, "UDP", nameof(options.Udp.Host), nameof(options.Udp.Port));
                 if (options.Udp.MaximumDatagramSize <= ChunkSettings.PrefixSize)
                     throw new ArgumentOutOfRangeException(nameof(options.Udp.MaximumDatagramSize), $"The UDP maximum datagram size must exceed the GELF chunk header size of {ChunkSettings.PrefixSize} bytes.");
+                if (options.Udp.MaximumDatagramSize > MaximumUdpPayload)
+                    throw new ArgumentOutOfRangeException(nameof(options.Udp.MaximumDatagramSize), $"The UDP maximum datagram size cannot exceed {MaximumUdpPayload} bytes.");
+                ValidateTimeout(options.Udp.DnsRefreshInterval, nameof(options.Udp.DnsRefreshInterval));
                 break;
 
             case TransportType.Tcp:
                 Require(options.Tcp, nameof(options.Tcp));
-                ValidateHostAndPort(options.Tcp.Host, options.Tcp.Port, "TCP");
+                ValidateHostAndPort(options.Tcp.Host, options.Tcp.Port, "TCP", nameof(options.Tcp.Host), nameof(options.Tcp.Port));
                 ValidateTimeout(options.Tcp.ConnectTimeout, nameof(options.Tcp.ConnectTimeout));
                 ValidateTimeout(options.Tcp.WriteTimeout, nameof(options.Tcp.WriteTimeout));
                 ValidateTls(options.Tcp.Tls, "TCP");
@@ -47,6 +53,10 @@ internal static class GraylogSinkOptionsValidator
 
                 if (options.Http.Tls != null && options.Http.Endpoint.Scheme != Uri.UriSchemeHttps)
                     throw new ArgumentException("HTTP TLS options require an HTTPS endpoint.", nameof(options.Http.Tls));
+                // The HTTP transport takes the name to validate from the endpoint URI, so a server name
+                // set here would be silently ignored rather than honoured.
+                if (options.Http.Tls?.ServerName != null)
+                    throw new ArgumentException("The HTTP transport takes the TLS server name from the endpoint; set it on the endpoint host instead.", nameof(options.Http.Tls));
                 ValidateTls(options.Http.Tls, "HTTP");
                 break;
 
@@ -61,12 +71,12 @@ internal static class GraylogSinkOptionsValidator
         }
     }
 
-    private static void ValidateHostAndPort(string? host, int port, string transport)
+    private static void ValidateHostAndPort(string? host, int port, string transport, string hostName, string portName)
     {
         if (string.IsNullOrWhiteSpace(host))
-            throw new ArgumentException($"The {transport} host must be configured.", nameof(host));
+            throw new ArgumentException($"The {transport} host must be configured.", hostName);
         if (port is < 1 or > 65535)
-            throw new ArgumentOutOfRangeException(nameof(port), $"The {transport} port must be between 1 and 65535.");
+            throw new ArgumentOutOfRangeException(portName, $"The {transport} port must be between 1 and 65535.");
     }
 
     private static void Require<T>(T? value, string name) where T : class

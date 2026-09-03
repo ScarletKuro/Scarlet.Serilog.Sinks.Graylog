@@ -1,28 +1,24 @@
-using Scarlet.Serilog.Sinks.Graylog.Core.Helpers;
-
 namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
 {
     /// <summary>
-    /// The sizing and identifier settings used when splitting a GELF payload into UDP chunks.
+    /// The sizing settings used when splitting a GELF payload into UDP chunks.
     /// </summary>
     internal sealed class ChunkSettings
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="ChunkSettings"/> class.
         /// </summary>
-        /// <param name="messageIdGeneratorType">How the identifier shared by a message's chunks is generated.</param>
         /// <param name="maxMessageSizeInUdp">The largest datagram to send.</param>
-        public ChunkSettings(MessageIdGeneratorType messageIdGeneratorType, int maxMessageSizeInUdp)
+        public ChunkSettings(int maxMessageSizeInUdp)
         {
-            MessageIdGeneratorType = messageIdGeneratorType;
             MaxMessageSizeInUdp = maxMessageSizeInUdp;
         }
 
-        /// <summary>How the identifier shared by the chunks of one message is generated.</summary>
-        public MessageIdGeneratorType MessageIdGeneratorType { get; }
-
-        /// <summary>The GELF chunk header size.</summary>
+        /// <summary>The GELF chunk header size: two magic bytes, the message id, then the sequence number and count.</summary>
         public const byte PrefixSize = 12;
+
+        /// <summary>The size of the message id inside the chunk header.</summary>
+        public const byte MessageIdSize = 8;
 
         /// <summary>The maximum number of GELF chunks allowed.</summary>
         public const byte MaxNumberOfChunksAllowed = 128;

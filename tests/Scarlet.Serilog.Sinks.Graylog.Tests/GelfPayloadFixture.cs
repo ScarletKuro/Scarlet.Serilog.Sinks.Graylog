@@ -154,8 +154,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
 
             JsonObject payload = SinglePayload(transport);
 
-            // The sequence itself is rendered as text, and is deliberately not underscore-prefixed.
-            Assert.False(string.IsNullOrEmpty(payload.Text("Bars")));
+            // The sequence itself is rendered as text alongside the expanded elements.
+            Assert.False(string.IsNullOrEmpty(payload.Text("_Bars")));
 
             Assert.Equal(1, payload.Value<int>("_Bars.0.Id"));
             Assert.Equal("one", payload.Text("_Bars.0.Prop"));
@@ -175,7 +175,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
 
             JsonObject payload = SinglePayload(transport);
 
-            Assert.True(payload.ContainsKey("Bars"));
+            Assert.True(payload.ContainsKey("_Bars"));
             Assert.False(payload.ContainsKey("_Bars.0.Id"));
         }
 
@@ -192,7 +192,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
 
             JsonObject payload = SinglePayload(transport);
 
-            Assert.Equal("{\"0\":\"zero\",\"1\":\"one\"}", payload.Json("CommandResponse"));
+            Assert.Equal("{\"0\":\"zero\",\"1\":\"one\"}", payload.Json("_CommandResponse"));
         }
 
         [Fact]
@@ -319,7 +319,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
 
             JsonObject payload = SinglePayload(transport);
 
-            JsonObject detail = payload.Object("ExceptionDetail");
+            JsonObject detail = payload.Object("_ExceptionDetail");
 
             Assert.Equal("System.InvalidOperationException", detail.Text("Type"));
             Assert.Equal("Test exception", detail.Text("Message"));

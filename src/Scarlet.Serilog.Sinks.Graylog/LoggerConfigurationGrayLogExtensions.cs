@@ -27,33 +27,9 @@ public static class LoggerConfigurationGrayLogExtensions
         if (options == null)
             throw new ArgumentNullException(nameof(options));
 
-        GraylogSinkOptionsValidator.Validate(options);
-
         var sink = new GraylogSink(options);
         return options.Delivery.Batching is { } batchingOptions
             ? loggerSinkConfiguration.Sink(sink, batchingOptions, options.Delivery.MinimumLevel)
             : loggerSinkConfiguration.Sink((ILogEventSink)sink, options.Delivery.MinimumLevel);
-    }
-
-    internal static BatchingOptions? BuildBatchingOptions(
-        bool? batched,
-        int? batchSizeLimit,
-        TimeSpan? bufferingTimeLimit,
-        int? queueLimit,
-        TimeSpan? retryTimeLimit,
-        bool? eagerlyEmitFirstEvent)
-    {
-        bool hasSettings = batchSizeLimit.HasValue || bufferingTimeLimit.HasValue || queueLimit.HasValue || retryTimeLimit.HasValue || eagerlyEmitFirstEvent.HasValue;
-        if (batched == false || (batched == null && !hasSettings))
-            return null;
-
-        return new BatchingOptions
-        {
-            BatchSizeLimit = batchSizeLimit ?? new BatchingOptions().BatchSizeLimit,
-            BufferingTimeLimit = bufferingTimeLimit ?? new BatchingOptions().BufferingTimeLimit,
-            QueueLimit = queueLimit is > 0 ? queueLimit : queueLimit.HasValue ? null : new BatchingOptions().QueueLimit,
-            RetryTimeLimit = retryTimeLimit ?? new BatchingOptions().RetryTimeLimit,
-            EagerlyEmitFirstEvent = eagerlyEmitFirstEvent ?? new BatchingOptions().EagerlyEmitFirstEvent
-        };
     }
 }

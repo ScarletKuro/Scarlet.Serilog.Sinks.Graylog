@@ -40,8 +40,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core
             switch (_options.TransportType)
             {
                 case SinkTransportType.Udp:
-                    var chunkSettings = new ChunkSettings(_options.Udp.MessageIdGeneratorType, _options.Udp.MaximumDatagramSize);
-                    IDataToChunkConverter chunkConverter = new DataToChunkConverter(chunkSettings, new MessageIdGeneratorResolver());
+                    var chunkSettings = new ChunkSettings(_options.Udp.MaximumDatagramSize);
+                    IDataToChunkConverter chunkConverter = new DataToChunkConverter(chunkSettings, new RandomMessageIdGenerator());
 
                     var udpClient = new UdpTransportClient(_options.Udp, new DnsWrapper());
                     var udpTransport = new UdpTransport(udpClient, chunkConverter, _options.Udp);

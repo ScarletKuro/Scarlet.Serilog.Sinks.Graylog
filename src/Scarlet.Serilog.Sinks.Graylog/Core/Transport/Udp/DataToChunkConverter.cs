@@ -1,7 +1,6 @@
 using Scarlet.Serilog.Sinks.Graylog.Core.Helpers;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
 {
@@ -9,18 +8,18 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
     internal sealed class DataToChunkConverter : IDataToChunkConverter
     {
         private readonly ChunkSettings _settings;
-        private readonly IMessageIdGeneratorResolver _generatorResolver;
+        private readonly IMessageIdGenerator _messageIdGenerator;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DataToChunkConverter"/> class.
         /// </summary>
         /// <param name="settings">The settings.</param>
-        /// <param name="generatorResolver">The generator resolver.</param>
+        /// <param name="messageIdGenerator">Produces the identifier the chunks of one message share.</param>
         public DataToChunkConverter(ChunkSettings settings,
-                                    IMessageIdGeneratorResolver generatorResolver)
+                                    IMessageIdGenerator messageIdGenerator)
         {
             _settings = settings;
-            _generatorResolver = generatorResolver;
+            _messageIdGenerator = messageIdGenerator;
         }
 
         /// <inheritdoc />
@@ -32,38 +31,36 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
                 return new List<byte[]>(1) { message };
             }
 
-            int chunksCount = (messageLength + _settings.MaxMessageSizeInChunk - 1) / _settings.MaxMessageSizeInChunk;
+            int maxChunkPayload = _settings.MaxMessageSizeInChunk;
+            int chunksCount = (messageLength + maxChunkPayload - 1) / maxChunkPayload;
             if (chunksCount > ChunkSettings.MaxNumberOfChunksAllowed)
             {
                 throw new ArgumentException("message was too long", nameof(message));
             }
 
-            IMessageIdGenerator messageIdGenerator = _generatorResolver.Resolve(_settings.MessageIdGeneratorType);
-            byte[] messageId = messageIdGenerator.GenerateMessageId(message);
+            byte[] messageId = _messageIdGenerator.GenerateMessageId(message);
 
-            var result = new List<byte[]>();
+            var result = new List<byte[]>(chunksCount);
             for (byte i = 0; i < chunksCount; i++)
             {
-                IList<byte> chunkHeader = ConstructChunkHeader(messageId, i, (byte)chunksCount);
+                int offset = i * maxChunkPayload;
+                int length = Math.Min(maxChunkPayload, messageLength - offset);
 
-                int skip = i * _settings.MaxMessageSizeInChunk;
-                byte[] chunkData = message.Skip(skip).Take(_settings.MaxMessageSizeInChunk).ToArray();
+                // Written straight into the datagram. Going through LINQ and a List<byte> instead cost
+                // three copies of every chunk - measured at 3x the payload size in garbage, where the
+                // datagrams themselves are the floor.
+                var chunk = new byte[ChunkSettings.PrefixSize + length];
 
-                var messageChunkFull = new List<byte>(chunkHeader.Count + chunkData.Length);
-                messageChunkFull.AddRange(chunkHeader);
-                messageChunkFull.AddRange(chunkData);
-                result.Add(messageChunkFull.ToArray());
+                chunk[0] = ChunkSettings.GelfMagicBytes[0];
+                chunk[1] = ChunkSettings.GelfMagicBytes[1];
+                Buffer.BlockCopy(messageId, 0, chunk, 2, ChunkSettings.MessageIdSize);
+                chunk[ChunkSettings.PrefixSize - 2] = i;
+                chunk[ChunkSettings.PrefixSize - 1] = (byte)chunksCount;
+                Buffer.BlockCopy(message, offset, chunk, ChunkSettings.PrefixSize, length);
+
+                result.Add(chunk);
             }
-            return result;
-        }
 
-        private static IList<byte> ConstructChunkHeader(byte[] messageId, byte chunkNumber, byte chunksCount)
-        {
-            var result = new List<byte>(ChunkSettings.PrefixSize);
-            result.AddRange(ChunkSettings.GelfMagicBytes);
-            result.AddRange(messageId);
-            result.Add(chunkNumber);
-            result.Add(chunksCount);
             return result;
         }
     }

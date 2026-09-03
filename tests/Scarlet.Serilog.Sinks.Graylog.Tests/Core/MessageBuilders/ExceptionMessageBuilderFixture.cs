@@ -1,4 +1,6 @@
 using Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders;
+using Serilog.Events;
+using System.Linq;
 using System;
 using System.Text.Json.Nodes;
 using Xunit;
@@ -49,6 +51,32 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
             Assert.Equal("never thrown", actual.Text("_ExceptionMessage"));
             Assert.True(actual.ContainsKey("_StackTrace"));
             Assert.Null(actual["_StackTrace"]);
+        }
+
+        /// <summary>
+        /// The exception fields belong on the GELF message, not on the log event.
+        /// </summary>
+        /// <remarks>
+        /// These used to be written with <c>logEvent.AddOrUpdateProperty</c>. Serilog hands the same
+        /// <see cref="LogEvent"/> instance to every sink in the pipeline, so that leaked
+        /// ExceptionSource, ExceptionType, ExceptionMessage and StackTrace into the console, file and
+        /// every other configured sink - and under batching it mutated the event from the batching
+        /// thread while those sinks could be reading it.
+        /// </remarks>
+        [Fact]
+        public void Build_DoesNotMutateTheLogEvent()
+        {
+            LogEvent logEvent = LogEventSource.GetExceptionLogEvent(DateTimeOffset.UnixEpoch, LogEventSource.NestedException(2));
+            ExceptionMessageBuilder target = new("localhost", new GelfOptions());
+
+            string[] before = logEvent.Properties.Keys.ToArray();
+
+            JsonObject payload = target.Build(logEvent);
+
+            Assert.Equal(before, logEvent.Properties.Keys.ToArray());
+            // ...and the fields still reached the message.
+            Assert.True(payload.ContainsKey("_ExceptionType"));
+            Assert.True(payload.ContainsKey("_ExceptionMessage"));
         }
 
         private static JsonObject Build(Exception exception, Action<GelfOptions>? configure = null)

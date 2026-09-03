@@ -1,4 +1,4 @@
-using Serilog.Debugging;
+﻿using Serilog.Debugging;
 using System;
 using System.IO;
 using Scarlet.Serilog.Sinks.Graylog.Core.Helpers;
@@ -23,8 +23,6 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
     /// <seealso cref="ITransportClient{T}" />
     public class TcpTransportClient : ITransportClient<byte[]>
     {
-        private const int DefaultPort = 12201;
-
         private Stream? _stream;
 
         private readonly TcpTransportOptions _options;
@@ -81,7 +79,11 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
         private async Task<Stream> Connect()
         {
             string hostNameOrAddress = _options.Host ?? throw new InvalidOperationException("The TCP host value must be set.");
-            IPAddress? address = await _dnsInfoProvider.GetIpAddress(hostNameOrAddress).ConfigureAwait(false);
+            // An IP literal needs no resolver; only a name is looked up, and it is looked up
+            // again on every reconnect, so a host that moves is picked up there.
+            IPAddress? address = IPAddress.TryParse(hostNameOrAddress, out IPAddress? literal)
+                ? literal
+                : await _dnsInfoProvider.GetIpAddress(hostNameOrAddress).ConfigureAwait(false);
             if (address == null)
             {
                 SelfLog.WriteLine("IP address could not be resolved.");

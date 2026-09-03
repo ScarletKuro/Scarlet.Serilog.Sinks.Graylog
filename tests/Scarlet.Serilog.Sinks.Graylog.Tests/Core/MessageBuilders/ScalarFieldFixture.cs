@@ -193,7 +193,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
 
             JsonObject actual = messageBuilder.Build(logEvent);
 
-            Assert.Equal("{\"alpha\":\"one\",\"2\":\"two\"}", actual.Json("Val"));
+            Assert.Equal("{\"alpha\":\"one\",\"2\":\"two\"}", actual.Json("_Val"));
         }
 
         private static GelfOptions OptionsWith(JsonSerializerOptions serializerOptions)

@@ -97,13 +97,27 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         {
             GraylogSink target = new(new GraylogSinkOptions
             {
-                Udp = new UdpTransportOptions { Host = "localhost" },
-                // Custom without a TransportFactory cannot produce a transport.
-                TransportType = TransportType.Custom
+                TransportType = TransportType.Custom,
+                // A valid configuration whose transport still cannot be built: the factory is only
+                // invoked on the first emit, so this is past the constructor's validation.
+                Custom = new CustomTransportOptions { Factory = () => throw new InvalidOperationException("no transport") }
             });
 
             Assert.ThrowsAny<Exception>(
                 () => target.Emit(LogEventSource.GetSimpleLogEvent(DateTimeOffset.UnixEpoch)));
+        }
+
+        /// <summary>
+        /// Validation used to run only inside <c>WriteTo.Graylog(...)</c>, so constructing the sink
+        /// directly skipped every check.
+        /// </summary>
+        [Fact]
+        public void Constructor_WhenTheOptionsAreInvalid_Throws()
+        {
+            // Custom transport, no factory.
+            var options = new GraylogSinkOptions { TransportType = TransportType.Custom };
+
+            Assert.Throws<ArgumentException>(() => new GraylogSink(options));
         }
 
         /// <summary>
