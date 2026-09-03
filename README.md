@@ -6,7 +6,7 @@
 [![Nuget](https://img.shields.io/nuget/dt/Scarlet.Serilog.Sinks.Graylog?color=ff4081&label=nuget%20downloads&logo=nuget)](https://www.nuget.org/packages/Scarlet.Serilog.Sinks.Graylog/)
 [![GitHub](https://img.shields.io/github/license/ScarletKuro/Scarlet.Serilog.Sinks.Graylog?color=594ae2&logo=github)](https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/blob/main/LICENSE)
 
-A maintained fork of [Serilog.Sinks.Graylog](https://github.com/whir1/serilog-sinks-graylog) by Anton Volkov, which has not received updates for a long time.
+A maintained fork of [Serilog.Sinks.Graylog](https://github.com/serilog-contrib/serilog-sinks-graylog) by Anton Volkov, which has not received updates for a long time.
 
 ## Migrating from Serilog.Sinks.Graylog
 
