@@ -10,17 +10,28 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Extensions
 {
     public class StringExtensionsFixture
     {
+        /// <summary>
+        /// The contract is a gzip stream Graylog can inflate, not one exact byte sequence.
+        /// </summary>
+        /// <remarks>
+        /// This used to assert a hard-coded array captured on Windows. RFC 1952 reserves header byte 9
+        /// for the operating system the stream was produced on, so .NET writes 10 there on Windows and
+        /// 3 on Linux - the assertion could only ever pass on one of them, and it started failing when
+        /// CI moved to ubuntu-latest.
+        /// </remarks>
         [Fact]
         public void WhenCompressMessage_ThenResultShouldBeExpected()
         {
-            var giwen = "Some string";
-            var expected = new byte[]
-            {
-                31,139,8,0,0,0,0,0,0,10,11,206,207,77,85,40,46,41,202,204,75,7,0,142,183,209,127,11,0,0,0
-            };
+            const string given = "Some string";
 
-            byte[] actual = giwen.ToGzip();
-            Assert.Equal(expected, actual);
+            byte[] actual = given.ToGzip();
+
+            // RFC 1952 header: the magic bytes and the compression method, all platform-independent.
+            Assert.Equal(0x1f, actual[0]);
+            Assert.Equal(0x8b, actual[1]);
+            Assert.Equal(8, actual[2]);
+
+            Assert.Equal(given, Decompress(actual));
         }
 
         /// <summary>
@@ -40,12 +51,16 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Extensions
 
             byte[] compressed = given.ToGzip();
 
-            using var input = new MemoryStream(compressed);
-            using var gzip = new GZipStream(input, CompressionMode.Decompress);
-            using var output = new MemoryStream();
-            gzip.CopyTo(output);
+            Assert.Equal(given, Decompress(compressed));
+        }
 
-            Assert.Equal(given, Encoding.UTF8.GetString(output.ToArray()));
+        [Fact]
+        public void ToGzip_WithMultiByteCharacters_RoundTrips()
+        {
+            // GetByteCount and GetBytes have to agree about the buffer size for anything outside ASCII.
+            const string given = "Ω 日本語 🚀 emoji and accents: café";
+
+            Assert.Equal(given, Decompress(given.ToGzip()));
         }
 
         [Theory]
@@ -57,6 +72,17 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Extensions
             var actual = given.Truncate(length);
 
             Assert.Equal(expected, actual);
+        }
+
+        private static string Decompress(byte[] compressed)
+        {
+            using var input = new MemoryStream(compressed);
+            using var gzip = new GZipStream(input, CompressionMode.Decompress);
+            using var output = new MemoryStream();
+
+            gzip.CopyTo(output);
+
+            return Encoding.UTF8.GetString(output.ToArray());
         }
     }
 }
