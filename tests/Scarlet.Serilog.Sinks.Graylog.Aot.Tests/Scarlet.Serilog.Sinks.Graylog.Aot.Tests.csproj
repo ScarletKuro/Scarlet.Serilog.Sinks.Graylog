@@ -1,41 +1,41 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-    <PropertyGroup>
-        <OutputType>Exe</OutputType>
-        <TargetFramework>net10.0</TargetFramework>
-        <Nullable>enable</Nullable>
-        <IsPackable>false</IsPackable>
-        <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
-        <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
-        <!--Unsigned, and named '...Aot.Tests' so it deliberately does not match the sink's
-            InternalsVisibleTo: this project exists to prove the public API survives ILC.-->
-        <!--Analyzers alone cannot prove Native AOT compatibility; the docs are explicit that the app has
-            to be published and run. This project exists to be published, so any IL warning coming from the
-            sink or its dependencies fails the build.-->
-        <PublishAot>true</PublishAot>
-        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-        <!--Report every trimmer warning rather than collapsing them to one per assembly.-->
-        <TrimmerSingleWarn>false</TrimmerSingleWarn>
-        <!--The JIT run needs the reporting extensions, because CI asks for coverage and a TRX report and
-            the testing platform rejects options no referenced extension owns. The Native AOT publish must
-            not carry them: code coverage instrumentation is a separate opt-in that does not survive ILC.-->
-        <IncludeTestReportingExtensions Condition="'$(IncludeTestReportingExtensions)' == ''">true</IncludeTestReportingExtensions>
-    </PropertyGroup>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <!--Unsigned, and named '...Aot.Tests' so it deliberately does not match the sink's
+        InternalsVisibleTo: this project exists to prove the public API survives ILC.-->
+    <!--Analyzers alone cannot prove Native AOT compatibility; the docs are explicit that the app has
+        to be published and run. This project exists to be published, so any IL warning coming from the
+        sink or its dependencies fails the build.-->
+    <PublishAot>true</PublishAot>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!--Report every trimmer warning rather than collapsing them to one per assembly.-->
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
+    <!--The JIT run needs the reporting extensions, because CI asks for coverage and a TRX report and
+        the testing platform rejects options no referenced extension owns. The Native AOT publish must
+        not carry them: code coverage instrumentation is a separate opt-in that does not survive ILC.-->
+    <IncludeTestReportingExtensions Condition="'$(IncludeTestReportingExtensions)' == ''">true</IncludeTestReportingExtensions>
+  </PropertyGroup>
 
-    <ItemGroup>
-        <!--The .aot variant of the xunit.v3.mtp-v2 package the main test project uses: same version, but
-            test discovery is source-generated instead of reflected, which is what makes ILC viable.-->
-        <PackageReference Include="xunit.v3.aot.mtp-v2" Version="4.0.0" />
+  <ItemGroup>
+    <!--The .aot variant of the xunit.v3.mtp-v2 package the main test project uses: same version, but
+        test discovery is source-generated instead of reflected, which is what makes ILC viable.-->
+    <PackageReference Include="xunit.v3.aot.mtp-v2" Version="4.0.0" />
 
-        <ProjectReference Include="..\..\src\Scarlet.Serilog.Sinks.Graylog\Scarlet.Serilog.Sinks.Graylog.csproj" />
-    </ItemGroup>
+    <ProjectReference Include="..\..\src\Scarlet.Serilog.Sinks.Graylog\Scarlet.Serilog.Sinks.Graylog.csproj" />
+  </ItemGroup>
 
-    <ItemGroup Condition="'$(IncludeTestReportingExtensions)' == 'true'">
-        <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.10.0">
-            <PrivateAssets>all</PrivateAssets>
-        </PackageReference>
-        <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" Version="2.3.3">
-            <PrivateAssets>all</PrivateAssets>
-        </PackageReference>
-    </ItemGroup>
+  <ItemGroup Condition="'$(IncludeTestReportingExtensions)' == 'true'">
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.10.0">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" Version="2.3.3">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
 
 </Project>
