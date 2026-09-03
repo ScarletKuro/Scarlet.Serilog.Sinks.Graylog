@@ -28,10 +28,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Aot.Tests
                 using (Logger logger = new LoggerConfiguration()
                     .WriteTo.Graylog(new GraylogSinkOptions
                     {
-                        Facility = "aot-harness",
-                        HostnameOverride = "harness-host",
                         TransportType = TransportType.Custom,
-                        TransportFactory = () => transport
+                        Custom = new CustomTransportOptions { Factory = () => transport },
+                        Message = new GelfOptions { Facility = "aot-harness", HostnameOverride = "harness-host" }
                     })
                     .CreateLogger())
                 {

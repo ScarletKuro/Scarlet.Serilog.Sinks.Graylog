@@ -12,7 +12,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
         [Fact]
         public void GetSimpleLogEvent_GraylogSinkOptionsContainsHost_ReturnsOptionsHost()
         {
-            GraylogSinkOptions options = new()
+            GelfOptions options = new()
             {
                 HostnameOverride = "my_host"
             };

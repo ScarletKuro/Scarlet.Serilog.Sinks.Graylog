@@ -31,7 +31,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         {
             var transport = new RecordingTransport();
 
-            using (Logger logger = LoggerFor(transport, o => o.Facility = "edox-accounts"))
+            using (Logger logger = LoggerFor(transport, o => o.Message.Facility = "edox-accounts"))
             {
                 logger.Error("boom");
             }
@@ -70,7 +70,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             var transport = new RecordingTransport();
             string message = new string('x', 120);
 
-            using (Logger logger = LoggerFor(transport, o => o.ShortMessageMaxLength = 50))
+            using (Logger logger = LoggerFor(transport, o => o.Message.ShortMessageMaxLength = 50))
             {
                 logger.Information(message);
             }
@@ -89,7 +89,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             // Verbose on the logger, so the sink's own level restriction is what does the filtering.
             using (Logger logger = new LoggerConfiguration()
                        .MinimumLevel.Verbose()
-                       .WriteTo.Graylog(transport.SinkOptions(o => o.MinimumLogEventLevel = LogEventLevel.Information))
+                       .WriteTo.Graylog(transport.SinkOptions(o => o.Delivery.MinimumLevel = LogEventLevel.Information))
                        .CreateLogger())
             {
                 logger.Debug("dropped");
@@ -143,7 +143,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         {
             var transport = new RecordingTransport();
 
-            using (Logger logger = LoggerFor(transport, o => o.ParseArrayValues = true))
+            using (Logger logger = LoggerFor(transport, o => o.Message.ParseArrayValues = true))
             {
                 logger.Information("bars {@Bars}", (object)new[]
                 {
@@ -200,7 +200,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         {
             var transport = new RecordingTransport();
 
-            using (Logger logger = LoggerFor(transport, o => o.ParseArrayValues = true))
+            using (Logger logger = LoggerFor(transport, o => o.Message.ParseArrayValues = true))
             {
                 logger.Information("response {@CommandResponse}",
                     (object)new Dictionary<int, string> { [0] = "zero", [1] = "one" });
@@ -217,7 +217,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         {
             var transport = new RecordingTransport();
 
-            using (Logger logger = LoggerFor(transport, o => o.IncludeMessageTemplate = true))
+            using (Logger logger = LoggerFor(transport, o => o.Message.IncludeMessageTemplate = true))
             {
                 logger.Information("battle profile: {Name}", "Volkov");
             }
@@ -232,8 +232,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
 
             using (Logger logger = LoggerFor(transport, o =>
                    {
-                       o.IncludeMessageTemplate = true;
-                       o.MessageTemplateFieldName = "template";
+                       o.Message.IncludeMessageTemplate = true;
+                       o.Message.MessageTemplateFieldName = "template";
                    }))
             {
                 logger.Information("battle profile: {Name}", "Volkov");
@@ -250,7 +250,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         {
             var transport = new RecordingTransport();
 
-            using (Logger logger = LoggerFor(transport, o => o.ExcludeMessageTemplateProperties = true))
+            using (Logger logger = LoggerFor(transport, o => o.Message.ExcludeMessageTemplateProperties = true))
             {
                 logger.ForContext("Enriched", "kept").Information("hello {Named}", "dropped");
             }
@@ -266,7 +266,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         {
             var transport = new RecordingTransport();
 
-            using (Logger logger = LoggerFor(transport, o => o.JsonSerializerOptions = new JsonSerializerOptions
+            using (Logger logger = LoggerFor(transport, o => o.Message.JsonSerializerOptions = new JsonSerializerOptions
                    {
                        Converters = { new JsonStringEnumConverter() }
                    }))

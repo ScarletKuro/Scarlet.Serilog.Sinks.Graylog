@@ -5,23 +5,8 @@ using System.Linq;
 
 namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
 {
-    /// <summary>
-    /// Converts Data to udp chunks
-    /// </summary>
-    public interface IDataToChunkConverter
-    {
-        /// <summary>
-        /// Converts to chunks.
-        /// </summary>
-        /// <param name="message">The message.</param>
-        /// <returns>array of chunks to save</returns>
-        /// <exception cref="ArgumentException">message was too long</exception>
-        /// <exception cref="ArgumentException">message was too long</exception>
-        IList<byte[]> ConvertToChunks(byte[] message);
-    }
-
     /// <inheritdoc/>
-    public sealed class DataToChunkConverter : IDataToChunkConverter
+    internal sealed class DataToChunkConverter : IDataToChunkConverter
     {
         private readonly ChunkSettings _settings;
         private readonly IMessageIdGeneratorResolver _generatorResolver;
@@ -38,13 +23,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
             _generatorResolver = generatorResolver;
         }
 
-        /// <summary>
-        /// Converts to chunks.
-        /// </summary>
-        /// <param name="message">The message.</param>
-        /// <returns>array of chunks to save</returns>
-        /// <exception cref="ArgumentException">message was too long</exception>
-        /// <exception cref="ArgumentException">message was too long</exception>
+        /// <inheritdoc />
         public IList<byte[]> ConvertToChunks(byte[] message)
         {
             int messageLength = message.Length;
@@ -53,7 +32,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
                 return new List<byte[]>(1) { message };
             }
 
-            int chunksCount = messageLength / _settings.MaxMessageSizeInChunk + 1;
+            int chunksCount = (messageLength + _settings.MaxMessageSizeInChunk - 1) / _settings.MaxMessageSizeInChunk;
             if (chunksCount > ChunkSettings.MaxNumberOfChunksAllowed)
             {
                 throw new ArgumentException("message was too long", nameof(message));

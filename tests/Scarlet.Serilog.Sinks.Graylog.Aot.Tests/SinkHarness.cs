@@ -24,10 +24,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Aot.Tests
 
             var options = new GraylogSinkOptions
             {
-                Facility = "aot-harness",
                 TransportType = TransportType.Custom,
-                TransportFactory = () => transport,
-                JsonSerializerOptions = serializerOptions
+                Custom = new CustomTransportOptions { Factory = () => transport },
+                Message = new GelfOptions { Facility = "aot-harness", JsonSerializerOptions = serializerOptions }
             };
 
             using (var sink = new GraylogSink(options))

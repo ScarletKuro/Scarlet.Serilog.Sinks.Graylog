@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
 {
-    public static class LogLevelMapper
+    internal static class LogLevelMapper
     {
         private static readonly Dictionary<LogEventLevel, int> LogLevelMap = new()
         {

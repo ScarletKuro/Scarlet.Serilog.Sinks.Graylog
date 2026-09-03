@@ -29,7 +29,7 @@ There is no `Scarlet.Serilog.Sinks.Graylog.Batching` package — [batching](#bat
 | Before | Now |
 | --- | --- |
 | `using Serilog.Sinks.Graylog.Batching;` | `using Scarlet.Serilog.Sinks.Graylog;` |
-| `new BatchingGraylogSinkOptions { PeriodicOptions = new PeriodicBatchingSinkOptions { ... } }` | `new GraylogSinkOptions { Batching = new BatchingOptions { ... } }` |
+| `new BatchingGraylogSinkOptions { PeriodicOptions = new PeriodicBatchingSinkOptions { ... } }` | `new GraylogSinkOptions { Delivery = new DeliveryOptions { Batching = new BatchingOptions { ... } } }` |
 | `PeriodicBatchingSinkOptions.Period` | `BatchingOptions.BufferingTimeLimit` |
 | `period:` argument | `bufferingTimeLimit:` argument |
 
@@ -55,10 +55,10 @@ using Scarlet.Serilog.Sinks.Graylog.Core;
 
 var loggerConfig = new LoggerConfiguration()
     .WriteTo.Graylog(new GraylogSinkOptions
-      {
-          HostnameOrAddress = "localhost",
-          Port = 12201
-      });
+    {
+        TransportType = TransportType.Udp,
+        Udp = new UdpTransportOptions { Host = "localhost", Port = 12201 }
+    });
 ```
 ...or alternatively configure the sink in appsettings.json configuration like so:
 
@@ -71,9 +71,10 @@ var loggerConfig = new LoggerConfiguration()
     {
         "Name": "Graylog",
         "Args": {
-            "hostnameOrAddress": "localhost",
-            "port": "12201",
-            "transportType": "Udp"
+            "options": {
+              "transportType": "Udp",
+              "udp": { "host": "localhost", "port": 12201 }
+            }
         }
     }
     ]
@@ -81,78 +82,72 @@ var loggerConfig = new LoggerConfiguration()
 }
 ```
 
-Note that because of the limitations of the Serilog.Settings.Configuration package, you cannot configure IGelfConverter using json. 
+`Custom.Factory` and `Message.Converter` are code-only. JSON configuration supports the built-in
+UDP, TCP, and HTTP transports.
 
 by default udp protocol is using, if you want to use http define sink options like 
 
 ```csharp
 new GraylogSinkOptions
-      {
-          HostnameOrAddress = "http://localhost",
-          Port = 12201,
-          TransportType = TransportType.Http,
-      }
+{
+    TransportType = TransportType.Http,
+    Http = new HttpTransportOptions { Endpoint = new Uri("http://localhost:12201") }
+}
 ```
 
 ## TLS
 
-TLS is supported by the HTTP and TCP transports. Set `UseSsl` to `true` and configure the
-matching TLS-enabled Graylog input. Use a hostname that matches the server certificate; do not use
+TLS is supported by the HTTP and TCP transports. Use an `https` endpoint for HTTP and set `Tcp.Tls`
+for TCP. Use a hostname that matches the server certificate; do not use
 an IP address unless that IP address is included in the certificate's subject alternative names.
 
 ```csharp
 new GraylogSinkOptions
 {
-    HostnameOrAddress = "https://graylog.example.org",
-    Port = 12201,
     TransportType = TransportType.Http,
-    UseSsl = true
+    Http = new HttpTransportOptions { Endpoint = new Uri("https://graylog.example.org:12201") }
 };
 ```
 
-For TCP, use the same `UseSsl = true` setting with `TransportType.Tcp` and a hostname such as
-`graylog.example.org`.
+For TCP, use `Tcp = new TcpTransportOptions { Host = "graylog.example.org", Tls = new TlsOptions() }`.
 
 The certificate and private-key file paths shown in Graylog's input configuration belong on the
 Graylog server. The sink validates the server certificate against the client machine's normal
 operating-system trust store. Install a private CA there before connecting to an internally signed
 Graylog certificate.
 
-Client certificates (mutual TLS) are not currently supported. GELF over UDP does not support TLS;
-use TCP or HTTP when encryption in transit is required.
+Mutual TLS is available for TCP and HTTPS through `TlsOptions.ClientCertificatePath` (a PFX) and
+`ClientCertificatePassword`. GELF over UDP does not support TLS.
 
 ### HTTP custom headers
 
-Set `HttpHeaders` when a reverse proxy or API gateway requires request headers. These headers are
+Set `Http.Headers` when a reverse proxy or API gateway requires request headers. These headers are
 sent with every GELF HTTP request. A custom `Authorization` header takes precedence over
-`UsernameInHttp` and `PasswordInHttp`, allowing bearer-token authentication.
+`Http.BasicAuthentication`, allowing bearer-token authentication.
 
 ```csharp
 new GraylogSinkOptions
 {
-    HostnameOrAddress = "https://logs.example.org/project",
-    Port = 12201,
     TransportType = TransportType.Http,
-    HttpHeaders = new Dictionary<string, string>
+    Http = new HttpTransportOptions
     {
-        ["X-Graylog-Tenant"] = "payments",
-        ["Authorization"] = "Bearer <token>"
+        Endpoint = new Uri("https://logs.example.org:12201/project"),
+        Headers = new Dictionary<string, string> { ["X-Graylog-Tenant"] = "payments", ["Authorization"] = "Bearer <token>" }
     }
 };
 ```
 
 `Content-Type` cannot be overridden; the transport always sends JSON as `application/json`.
 
-All options you can see at
+All grouped options are defined in
 [`GraylogSinkOptions.cs`](https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/blob/master/src/Scarlet.Serilog.Sinks.Graylog/GraylogSinkOptions.cs)
-(which adds `Batching`) and its base
-[`Core/GraylogSinkOptions.cs`](https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/blob/master/src/Scarlet.Serilog.Sinks.Graylog/Core/GraylogSinkOptions.cs).
+(including `Message`, `Delivery`, and each transport section).
 
 You can create your own implementation of transports or converter and set it to options. But maybe i'll delete this feature in the future
 
 ## Batching
 
-Events are written as they are emitted by default. Set `GraylogSinkOptions.Batching` to buffer them
+Events are written as they are emitted by default. Set `GraylogSinkOptions.Delivery.Batching` to buffer them
 and deliver them in batches instead, using Serilog's built-in batching:
 
 ```csharp
@@ -161,25 +156,12 @@ using Serilog.Configuration;
 var loggerConfig = new LoggerConfiguration()
     .WriteTo.Graylog(new GraylogSinkOptions
       {
-          HostnameOrAddress = "localhost",
-          Port = 12201,
-          Batching = new BatchingOptions
-          {
-              BatchSizeLimit = 500,
-              BufferingTimeLimit = TimeSpan.FromSeconds(5)
-          }
+          Udp = new UdpTransportOptions { Host = "localhost", Port = 12201 },
+          Delivery = new DeliveryOptions { Batching = new BatchingOptions { BatchSizeLimit = 500, BufferingTimeLimit = TimeSpan.FromSeconds(5) } }
       });
 ```
 
-Or pass any of the batching arguments to the shorthand overload:
-
-```csharp
-.WriteTo.Graylog("localhost", 12201, TransportType.Udp, batchSizeLimit: 500)
-```
-
-`batched` controls this explicitly: `true` always batches, `false` never does even alongside other
-batching arguments, and leaving it unset batches only if you supplied at least one other batching
-argument. So `WriteTo.Graylog("localhost", 12201, TransportType.Udp)` stays unbatched.
+The options object is the only registration API; omit `Delivery.Batching` for immediate delivery.
 
 > **A batched logger must be disposed, or flushed with `Log.CloseAndFlush()`** — otherwise the tail
 > of the buffer is lost at shutdown.
@@ -194,12 +176,11 @@ In `appsettings.json` (note that `TimeSpan` values use `TimeSpan.Parse` format, 
     {
         "Name": "Graylog",
         "Args": {
-            "hostnameOrAddress": "localhost",
-            "port": 12201,
-            "transportType": "Udp",
-            "batched": true,
-            "batchSizeLimit": 500,
-            "bufferingTimeLimit": "00:00:05"
+            "options": {
+              "transportType": "Udp",
+              "udp": { "host": "localhost", "port": 12201 },
+              "delivery": { "batching": { "batchSizeLimit": 500, "bufferingTimeLimit": "00:00:05" } }
+            }
         }
     }
     ]
@@ -209,6 +190,9 @@ In `appsettings.json` (note that `TimeSpan` values use `TimeSpan.Parse` format, 
 
 Batching adds retry: a batch that fails is retried for up to `RetryTimeLimit` (10 minutes by
 default). Note that once `QueueLimit` is reached further events are **dropped**, not throttled.
+
+Graylog input buffer sizes, worker count, bind addresses, decompression limits, and server
+certificate/key paths are Graylog server settings. They are not sink options.
 
 ## Native AOT and trimming
 
@@ -229,7 +213,7 @@ is verified end to end rather than only by analyzers.
 
 ### Customizing how values are written
 
-`GraylogSinkOptions.JsonSerializerOptions` is the hook, and under AOT the customization has to arrive
+`GraylogSinkOptions.Message.JsonSerializerOptions` is the hook, and under AOT the customization has to arrive
 through a **`TypeInfoResolver`** — that is, a source-generated `JsonSerializerContext`. Declare the
 types whose serialization you want to control:
 
@@ -243,11 +227,13 @@ internal partial class MyLogContext : JsonSerializerContext;
 ```csharp
 new GraylogSinkOptions
 {
-    HostnameOrAddress = "localhost",
-    Port = 12201,
-    JsonSerializerOptions = new JsonSerializerOptions
+    Udp = new UdpTransportOptions { Host = "localhost", Port = 12201 },
+    Message = new GelfOptions
     {
-        TypeInfoResolver = MyLogContext.Default
+        JsonSerializerOptions = new JsonSerializerOptions
+        {
+            TypeInfoResolver = MyLogContext.Default
+        }
     }
 }
 ```

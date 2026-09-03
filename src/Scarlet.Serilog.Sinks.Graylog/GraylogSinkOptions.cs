@@ -1,19 +1,29 @@
-using Scarlet.Serilog.Sinks.Graylog.Core;
-using Serilog.Configuration;
+using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 
 namespace Scarlet.Serilog.Sinks.Graylog
 {
-    public class GraylogSinkOptions : GraylogSinkOptionsBase
+    /// <summary>Configures the Graylog sink. Transport sections other than the selected <see cref="TransportType"/> are ignored.</summary>
+    public sealed class GraylogSinkOptions
     {
-        /// <summary>
-        /// When set, log events are buffered and delivered to Graylog in batches using Serilog's
-        /// built-in batching sink. When <c>null</c> (the default) each event is written as it is
-        /// emitted.
-        /// </summary>
-        /// <remarks>
-        /// A batched logger must be disposed, or flushed with <c>Log.CloseAndFlush()</c>, or the
-        /// tail of the buffer is lost at shutdown.
-        /// </remarks>
-        public BatchingOptions? Batching { get; set; }
+        /// <summary>Gets or sets the transport used to deliver GELF messages.</summary>
+        public TransportType TransportType { get; set; } = TransportType.Udp;
+
+        /// <summary>Gets or sets GELF payload options.</summary>
+        public GelfOptions Message { get; set; } = new();
+
+        /// <summary>Gets or sets delivery and batching options.</summary>
+        public DeliveryOptions Delivery { get; set; } = new();
+
+        /// <summary>Gets or sets UDP transport options.</summary>
+        public UdpTransportOptions Udp { get; set; } = new();
+
+        /// <summary>Gets or sets TCP transport options.</summary>
+        public TcpTransportOptions Tcp { get; set; } = new();
+
+        /// <summary>Gets or sets HTTP transport options.</summary>
+        public HttpTransportOptions Http { get; set; } = new();
+
+        /// <summary>Gets or sets custom transport options.</summary>
+        public CustomTransportOptions Custom { get; set; } = new();
     }
 }

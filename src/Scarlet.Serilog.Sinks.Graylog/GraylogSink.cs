@@ -19,7 +19,7 @@ namespace Scarlet.Serilog.Sinks.Graylog
     /// them: <see cref="LoggerConfigurationGrayLogExtensions"/> hands the sink either to
     /// <c>LoggerSinkConfiguration.Sink(ILogEventSink, ...)</c> or to
     /// <c>LoggerSinkConfiguration.Sink(IBatchedLogEventSink, BatchingOptions, ...)</c>, depending on
-    /// <see cref="GraylogSinkOptions.Batching"/>.
+    /// <see cref="DeliveryOptions.Batching"/>.
     /// <para>
     /// The exception policy differs between the two paths, because their contracts do.
     /// <see cref="EmitBatchAsync"/> is asynchronous, so it lets everything propagate to Serilog's
@@ -37,6 +37,11 @@ namespace Scarlet.Serilog.Sinks.Graylog
         private readonly JsonSerializerOptions _options;
         private bool _disposed;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="GraylogSink"/> class.
+        /// </summary>
+        /// <param name="options">The sink options. A copy of <see cref="GelfOptions.JsonSerializerOptions"/> is taken here; the transport and converter are built on first use.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="options"/> is <c>null</c>.</exception>
         public GraylogSink(GraylogSinkOptions options)
         {
             if (options == null)
@@ -46,7 +51,7 @@ namespace Scarlet.Serilog.Sinks.Graylog
 
             ISinkComponentsBuilder sinkComponentsBuilder = new SinkComponentsBuilder(options);
 
-            var jsonSerializerOptions = options.JsonSerializerOptions ?? new JsonSerializerOptions(JsonSerializerDefaults.General);
+            var jsonSerializerOptions = options.Message.JsonSerializerOptions ?? new JsonSerializerOptions(JsonSerializerDefaults.General);
             _options = new JsonSerializerOptions(jsonSerializerOptions);
 
             _transport = new Lazy<ITransport>(sinkComponentsBuilder.MakeTransport);
@@ -65,7 +70,7 @@ namespace Scarlet.Serilog.Sinks.Graylog
         /// which reports it against this sink or, for an <c>AuditTo</c> logger, surfaces it to the
         /// caller. Only a failure of the transport's asynchronous send is left, and a synchronous void
         /// method has nowhere to report that, so it goes to <see cref="SelfLog"/>. Use
-        /// <see cref="GraylogSinkOptions.Batching"/> if delivery failures need to be observable, since
+        /// <see cref="DeliveryOptions.Batching"/> if delivery failures need to be observable, since
         /// that path propagates them to Serilog's batching infrastructure, which also retries.
         /// </para>
         /// </remarks>
@@ -117,6 +122,10 @@ namespace Scarlet.Serilog.Sinks.Graylog
             return _transport.Value.Send(payload);
         }
 
+        /// <inheritdoc />
+        /// <remarks>
+        /// Idempotent, and does not materialise the transport just to tear it down.
+        /// </remarks>
         public void Dispose()
         {
             if (_disposed)

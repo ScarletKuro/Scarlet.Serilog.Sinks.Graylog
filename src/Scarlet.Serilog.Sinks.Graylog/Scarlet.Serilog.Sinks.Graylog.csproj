@@ -5,6 +5,7 @@
     <PropertyGroup>
         <TargetFrameworks>net10.0;net9.0;net8.0;net471;net462;netstandard2.0</TargetFrameworks>
         <Nullable>enable</Nullable>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <!--Enables the trimming, single-file and AOT analyzers, and marks the assembly trimmable.
             Conditional because these are unsupported on the .NET Framework and netstandard2.0 targets,
             which would otherwise fail with NETSDK1195.-->
@@ -47,6 +48,10 @@
         <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all"/>
         <!--System.Net.Http is not an implicit framework reference on .NET Framework.-->
         <Reference Include="System.Net.Http"/>
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(TargetFramework)' == 'net462'">
+        <PackageReference Include="System.Net.Http.WinHttpHandler" Version="9.0.4"/>
     </ItemGroup>
 
     <ItemGroup Condition="'$(TargetFrameworkIdentifier)' != '.NETCoreApp'">

@@ -8,7 +8,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Fakes
 {
     /// <summary>
     /// An <see cref="ITransport"/> that records what was sent instead of touching the network.
-    /// Injected through <c>GraylogSinkOptionsBase.TransportFactory</c> with
+    /// Injected through <c>CustomTransportOptions.Factory</c> with
     /// <c>TransportType.Custom</c>.
     /// </summary>
     internal sealed class RecordingTransport : ITransport
@@ -34,16 +34,14 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Fakes
 
         /// <summary>
         /// Sink options that route a logger to this transport instead of the network. The host and
-        /// port are still required by the sink even though <c>TransportType.Custom</c> never uses them.
+        /// port are not required because <c>TransportType.Custom</c> never uses them.
         /// </summary>
         public GraylogSinkOptions SinkOptions(Action<GraylogSinkOptions>? configure = null)
         {
             var options = new GraylogSinkOptions
             {
-                HostnameOrAddress = "localhost",
-                Port = 12201,
                 TransportType = TransportType.Custom,
-                TransportFactory = () => this
+                Custom = new CustomTransportOptions { Factory = () => this }
             };
 
             configure?.Invoke(options);

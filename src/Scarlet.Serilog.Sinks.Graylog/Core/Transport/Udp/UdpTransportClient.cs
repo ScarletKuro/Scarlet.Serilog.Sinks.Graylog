@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -9,24 +9,34 @@ using Serilog.Debugging;
 namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
 {
     /// <summary>
-    /// Udp transport client
+    /// Sends GELF datagrams to a Graylog UDP input.
     /// </summary>
-    /// <seealso cref="byte" />
+    /// <remarks>
+    /// The endpoint is resolved once, on the first send, and the socket is reused afterwards. Sends
+    /// are serialized, so one instance is safe to share.
+    /// </remarks>
+    /// <seealso cref="ITransportClient{T}" />
     public sealed class UdpTransportClient : ITransportClient<byte[]>
     {
         private IPEndPoint? _ipEndPoint;
 
-        private readonly GraylogSinkOptionsBase _options;
+        private readonly UdpTransportOptions _options;
         private readonly IDnsInfoProvider _dnsInfoProvider;
         private readonly SemaphoreSlim _sendLock = new(1, 1);
         private UdpClient? _client;
 
-        public UdpTransportClient(GraylogSinkOptionsBase options, IDnsInfoProvider dnsInfoProvider)
+        /// <summary>
+        /// Initializes a new instance of the <see cref="UdpTransportClient"/> class.
+        /// </summary>
+        /// <param name="options">The UDP transport options.</param>
+        /// <param name="dnsInfoProvider">Resolves <see cref="UdpTransportOptions.Host"/> to an address.</param>
+        public UdpTransportClient(UdpTransportOptions options, IDnsInfoProvider dnsInfoProvider)
         {
             _options = options;
             _dnsInfoProvider = dnsInfoProvider;
 
         }
+
 
         private async Task<bool> EnsureTarget()
         {
@@ -35,16 +45,15 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
                 return true;
             }
 
-            string hostNameOrAddress = _options.HostnameOrAddress
-                ?? throw new InvalidOperationException("The HostnameOrAddress value must be set.");
+            string hostNameOrAddress = _options.Host ?? throw new InvalidOperationException("The UDP host value must be set.");
             var ipAddress = await _dnsInfoProvider.GetIpAddress(hostNameOrAddress).ConfigureAwait(false);
-            if (ipAddress == default)
+            if (ipAddress == null)
             {
                 SelfLog.WriteLine("IP address could not be resolved.");
                 return false;
             }
 
-            _ipEndPoint = new IPEndPoint(ipAddress, _options.Port.GetValueOrDefault());
+            _ipEndPoint = new IPEndPoint(ipAddress, _options.Port);
             _client = new UdpClient(ipAddress.AddressFamily);
             return true;
         }
@@ -53,6 +62,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
         /// Sends the specified payload.
         /// </summary>
         /// <param name="payload">The payload.</param>
+        /// <exception cref="InvalidOperationException">No host is configured, or it could not be resolved.</exception>
         public async Task Send(byte[] payload)
         {
             await _sendLock.WaitAsync().ConfigureAwait(false);
@@ -73,6 +83,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
             }
         }
 
+        /// <inheritdoc />
         public void Dispose() => _client?.Dispose();
     }
 }

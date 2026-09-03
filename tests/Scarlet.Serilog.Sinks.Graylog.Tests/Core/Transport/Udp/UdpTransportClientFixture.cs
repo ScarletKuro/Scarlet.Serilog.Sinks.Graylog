@@ -18,11 +18,11 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
         public async Task Send_WithoutAHostname_ThrowsAClearError()
         {
             var dnsInfoProvider = Substitute.For<IDnsInfoProvider>();
-            using var target = new UdpTransportClient(new GraylogSinkOptions(), dnsInfoProvider);
+            using var target = new UdpTransportClient(new UdpTransportOptions(), dnsInfoProvider);
 
             InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(() => target.Send(new byte[] { 1 }));
 
-            Assert.Equal("The HostnameOrAddress value must be set.", exception.Message);
+            Assert.Equal("The UDP host value must be set.", exception.Message);
             await dnsInfoProvider.DidNotReceive().GetIpAddress(Arg.Any<string>());
         }
 
@@ -42,9 +42,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
 
             byte[] payload = new Fixture().CreateMany<byte>(128).ToArray();
 
-            using var target = new UdpTransportClient(new GraylogSinkOptions
+            using var target = new UdpTransportClient(new UdpTransportOptions
             {
-                HostnameOrAddress = "graylog.example.org",
+                Host = "graylog.example.org",
                 Port = port
             }, dnsInfoProvider);
 
@@ -70,9 +70,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
             var dnsInfoProvider = Substitute.For<IDnsInfoProvider>();
             dnsInfoProvider.GetIpAddress("graylog.example.org").Returns(Task.FromResult<IPAddress?>(IPAddress.Loopback));
 
-            using var target = new UdpTransportClient(new GraylogSinkOptions
+            using var target = new UdpTransportClient(new UdpTransportOptions
             {
-                HostnameOrAddress = "graylog.example.org",
+                Host = "graylog.example.org",
                 Port = port
             }, dnsInfoProvider);
 
@@ -96,9 +96,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
             dnsInfoProvider.GetIpAddress("graylog.example.org").Returns(Task.FromResult<IPAddress?>(IPAddress.IPv6Loopback));
             byte[] payload = new byte[] { 1, 2, 3 };
 
-            using var target = new UdpTransportClient(new GraylogSinkOptions
+            using var target = new UdpTransportClient(new UdpTransportOptions
             {
-                HostnameOrAddress = "graylog.example.org",
+                Host = "graylog.example.org",
                 Port = port
             }, dnsInfoProvider);
 

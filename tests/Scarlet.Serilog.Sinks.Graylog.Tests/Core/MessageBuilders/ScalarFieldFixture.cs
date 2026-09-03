@@ -196,9 +196,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
             Assert.Equal("{\"alpha\":\"one\",\"2\":\"two\"}", actual.Json("Val"));
         }
 
-        private static GraylogSinkOptions OptionsWith(JsonSerializerOptions serializerOptions)
+        private static GelfOptions OptionsWith(JsonSerializerOptions serializerOptions)
         {
-            return new GraylogSinkOptions
+            return new GelfOptions
             {
                 Facility = "test",
                 JsonSerializerOptions = serializerOptions

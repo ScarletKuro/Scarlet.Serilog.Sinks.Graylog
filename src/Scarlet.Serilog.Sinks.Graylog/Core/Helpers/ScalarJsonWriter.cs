@@ -10,7 +10,7 @@ using System.Text.Json.Serialization.Metadata;
 namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
 {
     /// <summary>
-    /// Turns a <see cref="Serilog.Events.ScalarValue"/> payload into a <see cref="JsonNode"/> without
+    /// Turns a <see cref="global::Serilog.Events.ScalarValue"/> payload into a <see cref="System.Text.Json.Nodes.JsonNode"/> without
     /// relying on reflection-based serialization, so the sink stays usable under Native AOT.
     /// </summary>
     /// <remarks>

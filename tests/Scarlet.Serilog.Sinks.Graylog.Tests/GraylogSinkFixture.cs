@@ -26,9 +26,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
 
             var options = new GraylogSinkOptions
             {
-                GelfConverter = gelfConverter,
+                Message = new GelfOptions { Converter = gelfConverter },
                 TransportType = TransportType.Udp,
-                HostnameOrAddress = "localhost"
+                Udp = new UdpTransportOptions { Host = "localhost" }
             };
 
             GraylogSink target = new(options);
@@ -97,7 +97,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         {
             GraylogSink target = new(new GraylogSinkOptions
             {
-                HostnameOrAddress = "localhost",
+                Udp = new UdpTransportOptions { Host = "localhost" },
                 // Custom without a TransportFactory cannot produce a transport.
                 TransportType = TransportType.Custom
             });
@@ -146,20 +146,16 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         }
 
         /// <summary>
-        /// A failing sink must not take the application down when registered with <c>WriteTo</c>.
+        /// An incomplete custom transport is rejected before the sink is registered.
         /// </summary>
         [Fact]
-        public void WriteTo_WhenTransportCannotBeCreated_DoesNotThrowToTheCaller()
+        public void WriteTo_WhenCustomTransportHasNoFactory_Throws()
         {
-            using Logger logger = new LoggerConfiguration()
+            Assert.Throws<ArgumentException>(() => new LoggerConfiguration()
                 .WriteTo.Graylog(new GraylogSinkOptions
                 {
-                    HostnameOrAddress = "localhost",
                     TransportType = TransportType.Custom
-                })
-                .CreateLogger();
-
-            Assert.Null(Record.Exception(() => logger.Information("this must not throw")));
+                }));
         }
 
         /// <summary>

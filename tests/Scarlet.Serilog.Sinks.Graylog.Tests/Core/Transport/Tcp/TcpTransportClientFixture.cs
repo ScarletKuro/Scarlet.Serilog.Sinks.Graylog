@@ -25,9 +25,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Tcp
 
             var dnsInfoProvider = Substitute.For<IDnsInfoProvider>();
             dnsInfoProvider.GetIpAddress("graylog.example.org").Returns(Task.FromResult<IPAddress?>(IPAddress.Loopback));
-            using var target = new TcpTransportClient(new GraylogSinkOptions
+            using var target = new TcpTransportClient(new TcpTransportOptions
             {
-                HostnameOrAddress = "graylog.example.org",
+                Host = "graylog.example.org",
                 Port = port
             }, dnsInfoProvider);
 
@@ -55,9 +55,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Tcp
             var dnsInfoProvider = Substitute.For<IDnsInfoProvider>();
             dnsInfoProvider.GetIpAddress("graylog.example.org").Returns(Task.FromResult<IPAddress?>(null));
 
-            using var target = new TcpTransportClient(new GraylogSinkOptions
+            using var target = new TcpTransportClient(new TcpTransportOptions
             {
-                HostnameOrAddress = "graylog.example.org"
+                Host = "graylog.example.org"
             }, dnsInfoProvider);
 
             InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(() => target.Send(new byte[] { 1 }));
@@ -76,9 +76,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Tcp
             dnsInfoProvider.GetIpAddress("graylog.example.org").Returns(Task.FromResult<IPAddress?>(IPAddress.Loopback));
             byte[] payload = { 1, 2, 3, 0 };
 
-            using var target = new TcpTransportClient(new GraylogSinkOptions
+            using var target = new TcpTransportClient(new TcpTransportOptions
             {
-                HostnameOrAddress = "graylog.example.org",
+                Host = "graylog.example.org",
                 Port = port
             }, dnsInfoProvider);
 
@@ -107,9 +107,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Tcp
             var dnsInfoProvider = Substitute.For<IDnsInfoProvider>();
             dnsInfoProvider.GetIpAddress("graylog.example.org").Returns(Task.FromResult<IPAddress?>(IPAddress.Loopback));
 
-            using var target = new TcpTransportClient(new GraylogSinkOptions
+            using var target = new TcpTransportClient(new TcpTransportOptions
             {
-                HostnameOrAddress = "graylog.example.org",
+                Host = "graylog.example.org",
                 Port = port
             }, dnsInfoProvider);
 
@@ -144,9 +144,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Tcp
             dnsInfoProvider.GetIpAddress("graylog.example.org").Returns(Task.FromResult<IPAddress?>(IPAddress.IPv6Loopback));
             byte[] payload = { 1, 2, 3, 0 };
 
-            using var target = new TcpTransportClient(new GraylogSinkOptions
+            using var target = new TcpTransportClient(new TcpTransportOptions
             {
-                HostnameOrAddress = "graylog.example.org",
+                Host = "graylog.example.org",
                 Port = port
             }, dnsInfoProvider);
 

@@ -19,13 +19,13 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
     {
         private const string DefaultGelfVersion = "1.1";
 
-        protected GraylogSinkOptionsBase Options => _options;
+        /// <summary>Gets the GELF payload options this builder was created with.</summary>
+        protected GelfOptions Options { get; }
 
         private readonly string _hostName;
-        private readonly GraylogSinkOptionsBase _options;
 
         /// <summary>
-        /// Built on first use and rebuilt if <see cref="GraylogSinkOptionsBase.JsonSerializerOptions"/> is
+        /// Built on first use and rebuilt if <see cref="GelfOptions.JsonSerializerOptions"/> is
         /// swapped for a different instance, since the writer caches contracts per options instance.
         /// </summary>
         private ScalarJsonWriter? _scalarJsonWriter;
@@ -35,11 +35,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
         /// </summary>
         /// <param name="hostName">Name of the host.</param>
         /// <param name="options">The options.</param>
-        public GelfMessageBuilder(string hostName, GraylogSinkOptionsBase options)
+        public GelfMessageBuilder(string hostName, GelfOptions options)
         {
             _hostName = hostName;
-            _options = options;
+            Options = options;
         }
+
 
         /// <summary>
         /// Builds the specified log event.

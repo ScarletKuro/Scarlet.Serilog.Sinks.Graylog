@@ -5,7 +5,7 @@ using System.Text;
 
 namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
 {
-    public class HttpBasicAuthenticationGenerator
+    internal class HttpBasicAuthenticationGenerator
     {
         private readonly string? _usernameInHttp;
         private readonly string? _passwordInHttp;

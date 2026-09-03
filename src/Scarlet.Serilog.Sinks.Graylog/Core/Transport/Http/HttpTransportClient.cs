@@ -1,5 +1,6 @@
 using Scarlet.Serilog.Sinks.Graylog.Core.Helpers;
 using System;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -7,38 +8,75 @@ using System.Threading.Tasks;
 
 namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
 {
+    /// <summary>
+    /// Posts GELF messages to a Graylog HTTP input.
+    /// </summary>
+    /// <remarks>
+    /// The <see cref="HttpClient"/> is created and configured on the first send and reused afterwards,
+    /// so changes to the options stop taking effect once a message has been sent. Override
+    /// <see cref="CreateHttpClient"/> or <see cref="ConfigureHttpClient"/> to take over either half.
+    /// </remarks>
+    /// <seealso cref="ITransportClient{T}" />
     public class HttpTransportClient : ITransportClient<string>
     {
-        private const string _defaultHttpUriPath = "gelf";
+        private const string DefaultHttpUriPath = "gelf";
 
         private readonly Lazy<HttpClient> _httpClient;
 
-        private readonly GraylogSinkOptionsBase options;
+        private readonly HttpTransportOptions _options;
 
-        public HttpTransportClient(GraylogSinkOptionsBase options)
+        /// <summary>
+        /// Initializes a new instance of the <see cref="HttpTransportClient"/> class.
+        /// </summary>
+        /// <param name="options">The HTTP transport options.</param>
+        public HttpTransportClient(HttpTransportOptions options)
         {
-            this.options = options;
+            _options = options;
             _httpClient = new Lazy<HttpClient>(CreateConfiguredHttpClient);
         }
 
-        protected virtual HttpClient CreateHttpClient() => new();
 
+        /// <summary>
+        /// Creates the <see cref="HttpClient"/> used for every request.
+        /// </summary>
+        /// <returns>
+        /// A plain client, or one over a handler carrying the client certificate when
+        /// <see cref="TlsOptions.ClientCertificatePath"/> is set.
+        /// </returns>
+        protected virtual HttpClient CreateHttpClient()
+        {
+            if (string.IsNullOrWhiteSpace(_options.Tls?.ClientCertificatePath))
+            {
+                return new HttpClient();
+            }
+
+ #if NET462
+            var handler = new WinHttpHandler();
+            handler.ClientCertificateOption = ClientCertificateOption.Manual;
+ #else
+            var handler = new HttpClientHandler();
+ #endif
+            handler.ClientCertificates.Add(TlsCertificateLoader.LoadClientCertificate(_options.Tls!));
+            return new HttpClient(handler, true);
+        }
+
+        /// <summary>
+        /// Applies the base address, the default headers and the configured authentication.
+        /// </summary>
+        /// <param name="httpClient">The client to configure.</param>
+        /// <exception cref="InvalidOperationException">
+        /// <see cref="HttpTransportOptions.Endpoint"/> is missing or relative, or a header in
+        /// <see cref="HttpTransportOptions.Headers"/> has an empty name, overrides <c>Content-Type</c>,
+        /// or is otherwise rejected.
+        /// </exception>
         protected virtual void ConfigureHttpClient(HttpClient httpClient)
         {
-            if (string.IsNullOrEmpty(options.HostnameOrAddress))
+            if (_options.Endpoint == null || !_options.Endpoint.IsAbsoluteUri)
             {
-                throw new InvalidOperationException("The HostnameOrAddress value must be set.");
+                throw new InvalidOperationException("The HTTP endpoint must be an absolute URI.");
             }
 
-            var builder = new UriBuilder(options.HostnameOrAddress)
-            {
-                Port = options.Port.GetValueOrDefault(443)
-            };
-
-            if (options.UseSsl)
-            {
-                builder.Scheme = "https";
-            }
+            var builder = new UriBuilder(_options.Endpoint);
 
             // A trailing slash makes a configured proxy path a base directory for the GELF endpoint.
             if (!builder.Path.EndsWith("/", StringComparison.Ordinal))
@@ -51,7 +89,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
             httpClient.DefaultRequestHeaders.ExpectContinue = false;
             httpClient.DefaultRequestHeaders.CacheControl = new CacheControlHeaderValue { NoCache = true };
 
-            var authenticationHeaderValue = new HttpBasicAuthenticationGenerator(options.UsernameInHttp, options.PasswordInHttp).Generate();
+            var authenticationHeaderValue = new HttpBasicAuthenticationGenerator(_options.BasicAuthentication?.Username, _options.BasicAuthentication?.Password).Generate();
 
             if (authenticationHeaderValue != null)
             {
@@ -63,12 +101,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
 
         private void ConfigureCustomHeaders(HttpClient httpClient)
         {
-            if (options.HttpHeaders == null)
+            if (_options.Headers == null)
             {
                 return;
             }
 
-            foreach (var header in options.HttpHeaders)
+            foreach (var header in _options.Headers)
             {
                 if (string.IsNullOrWhiteSpace(header.Key))
                 {
@@ -95,13 +133,15 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
             return httpClient;
         }
 
+        /// <inheritdoc />
+        /// <exception cref="HttpRequestException">Graylog answered with a non-success status code.</exception>
         public async Task Send(string message)
         {
             HttpClient httpClient = _httpClient.Value;
 
             var content = new StringContent(message, Encoding.UTF8, "application/json");
 
-            HttpResponseMessage result = await httpClient.PostAsync(_defaultHttpUriPath, content).ConfigureAwait(false);
+            HttpResponseMessage result = await httpClient.PostAsync(DefaultHttpUriPath, content).ConfigureAwait(false);
 
             // Throwing rather than swallowing is what lets Serilog's batching sink see the failure
             // and retry the batch; the unbatched path reports it through GraylogSink.Emit's
@@ -109,12 +149,17 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
             result.EnsureSuccessStatusCode();
         }
 
+        /// <inheritdoc />
         public void Dispose()
         {
             Dispose(true);
             GC.SuppressFinalize(this);
         }
 
+        /// <summary>
+        /// Releases the resources used by this client.
+        /// </summary>
+        /// <param name="disposing"><c>true</c> when called from <see cref="Dispose()"/>; the <see cref="HttpClient"/> is disposed with it, if one was ever created.</param>
         protected virtual void Dispose(bool disposing)
         {
             if (disposing)

@@ -16,7 +16,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
         {
             var transportClient = Substitute.For<ITransportClient<byte[]>>();
             var dataToChunkConverter = Substitute.For<IDataToChunkConverter>();
-            var options = new GraylogSinkOptions();
+            var options = new UdpTransportOptions();
 
             var fixture = new Fixture();
 

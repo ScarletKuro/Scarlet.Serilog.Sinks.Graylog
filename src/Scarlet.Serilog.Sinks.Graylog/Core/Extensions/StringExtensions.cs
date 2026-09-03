@@ -5,7 +5,7 @@ using System.Text;
 
 namespace Scarlet.Serilog.Sinks.Graylog.Core.Extensions
 {
-    public static class StringExtensions
+    internal static class StringExtensions
     {
         public static byte[] ToGzip(this string source)
         {

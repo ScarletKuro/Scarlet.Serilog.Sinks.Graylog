@@ -12,22 +12,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
         /// Builds the specified log event.
         /// </summary>
         /// <param name="logEvent">The log event.</param>
-        /// <returns></returns>
+        /// <returns>The GELF message for the event.</returns>
         JsonObject Build(LogEvent logEvent);
-    }
-
-    /// <summary>
-    /// Builder type
-    /// </summary>
-    public enum BuilderType
-    {
-        /// <summary>
-        /// Exception Builder
-        /// </summary>
-        Exception,
-        /// <summary>
-        /// Message Builder
-        /// </summary>
-        Message
     }
 }

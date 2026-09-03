@@ -11,18 +11,12 @@ using SinkTransportType = Scarlet.Serilog.Sinks.Graylog.Core.Transport.Transport
 
 namespace Scarlet.Serilog.Sinks.Graylog.Core
 {
-    public interface ISinkComponentsBuilder
+    internal class SinkComponentsBuilder : ISinkComponentsBuilder
     {
-        ITransport MakeTransport();
-        IGelfConverter MakeGelfConverter();
-    }
-
-    public class SinkComponentsBuilder : ISinkComponentsBuilder
-    {
-        private readonly GraylogSinkOptionsBase _options;
+        private readonly GraylogSinkOptions _options;
         private readonly Dictionary<BuilderType, Lazy<IMessageBuilder>> _builders;
 
-        public SinkComponentsBuilder(GraylogSinkOptionsBase options)
+        public SinkComponentsBuilder(GraylogSinkOptions options)
         {
             _options = options;
 
@@ -31,12 +25,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core
                 [BuilderType.Exception] = new(() =>
                 {
                     string hostName = Dns.GetHostName();
-                    return new ExceptionMessageBuilder(hostName, _options);
+                    return new ExceptionMessageBuilder(hostName, _options.Message);
                 }),
                 [BuilderType.Message] = new(() =>
                 {
                     string hostName = Dns.GetHostName();
-                    return new GelfMessageBuilder(hostName, _options);
+                    return new GelfMessageBuilder(hostName, _options.Message);
                 })
             };
         }
@@ -46,33 +40,33 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core
             switch (_options.TransportType)
             {
                 case SinkTransportType.Udp:
-                    var chunkSettings = new ChunkSettings(_options.MessageGeneratorType, _options.MaxMessageSizeInUdp);
+                    var chunkSettings = new ChunkSettings(_options.Udp.MessageIdGeneratorType, _options.Udp.MaximumDatagramSize);
                     IDataToChunkConverter chunkConverter = new DataToChunkConverter(chunkSettings, new MessageIdGeneratorResolver());
 
-                    var udpClient = new UdpTransportClient(_options, new DnsWrapper());
-                    var udpTransport = new UdpTransport(udpClient, chunkConverter, _options);
+                    var udpClient = new UdpTransportClient(_options.Udp, new DnsWrapper());
+                    var udpTransport = new UdpTransport(udpClient, chunkConverter, _options.Udp);
 
                     return udpTransport;
                 case SinkTransportType.Http:
-                    var httpClient = new HttpTransportClient(_options);
+                    var httpClient = new HttpTransportClient(_options.Http);
 
                     return new HttpTransport(httpClient);
                 case SinkTransportType.Tcp:
-                    var tcpClient = new TcpTransportClient(_options, new DnsWrapper());
+                    var tcpClient = new TcpTransportClient(_options.Tcp, new DnsWrapper());
 
                     return new TcpTransport(tcpClient);
                 case SinkTransportType.Custom:
-                    if (_options.TransportFactory == null)
+                    if (_options.Custom.Factory == null)
                     {
                         throw new InvalidOperationException("The TransportFactory value must have a value.");
                     }
 
-                    return _options.TransportFactory();
+                    return _options.Custom.Factory();
                 default:
                     throw new ArgumentOutOfRangeException(nameof(_options), _options.TransportType, null);
             }
         }
 
-        public IGelfConverter MakeGelfConverter() => _options.GelfConverter ?? new GelfConverter(_builders);
+        public IGelfConverter MakeGelfConverter() => _options.Message.Converter ?? new GelfConverter(_builders);
     }
 }

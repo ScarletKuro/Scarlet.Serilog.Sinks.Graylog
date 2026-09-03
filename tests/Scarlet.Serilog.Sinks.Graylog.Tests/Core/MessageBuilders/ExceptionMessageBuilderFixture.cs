@@ -51,9 +51,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
             Assert.Null(actual["_StackTrace"]);
         }
 
-        private static JsonObject Build(Exception exception, Action<GraylogSinkOptions>? configure = null)
+        private static JsonObject Build(Exception exception, Action<GelfOptions>? configure = null)
         {
-            var options = new GraylogSinkOptions();
+            var options = new GelfOptions();
 
             configure?.Invoke(options);
 

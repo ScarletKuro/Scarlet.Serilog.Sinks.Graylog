@@ -84,7 +84,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             Assert.DoesNotContain("\n", Assert.Single(compact.Payloads));
 
             var indented = new RecordingTransport();
-            using (var sink = new GraylogSink(indented.SinkOptions(o => o.JsonSerializerOptions = new JsonSerializerOptions { WriteIndented = true })))
+            using (var sink = new GraylogSink(indented.SinkOptions(o => o.Message.JsonSerializerOptions = new JsonSerializerOptions { WriteIndented = true })))
             {
                 await sink.EmitBatchAsync(Events(1));
             }
@@ -111,7 +111,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             int created = 0;
             var transport = new RecordingTransport();
 
-            var sink = new GraylogSink(transport.SinkOptions(o => o.TransportFactory = () =>
+            var sink = new GraylogSink(transport.SinkOptions(o => o.Custom.Factory = () =>
             {
                 created++;
                 return transport;

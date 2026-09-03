@@ -23,10 +23,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
 
             loggerConfig.WriteTo.Graylog(new GraylogSinkOptions
             {
-                MinimumLogEventLevel = LogEventLevel.Information,
-                Facility = "VolkovTestFacility",
-                HostnameOrAddress = "localhost",
-                Port = 12201
+                Delivery = new DeliveryOptions { MinimumLevel = LogEventLevel.Information },
+                Message = new GelfOptions { Facility = "VolkovTestFacility" },
+                Udp = new UdpTransportOptions { Host = "localhost", Port = 12201 }
             });
 
             var logger = loggerConfig.CreateLogger();
@@ -34,12 +33,16 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         }
 
         [Fact]
-        public void CanApplyExtensionWithIntegralParameterTypes()
+        public void OptionsObjectIsTheOnlyPublicGraylogConfigurationOverload()
         {
             var loggerConfig = new LoggerConfiguration();
 
-            loggerConfig.WriteTo.Graylog("localhost", 12201, TransportType.Udp, false,
-                LogEventLevel.Information);
+            loggerConfig.WriteTo.Graylog(new GraylogSinkOptions
+            {
+                TransportType = TransportType.Udp,
+                Udp = new UdpTransportOptions { Host = "localhost", Port = 12201 },
+                Delivery = new DeliveryOptions { MinimumLevel = LogEventLevel.Information }
+            });
 
             var logger = loggerConfig.CreateLogger();
             Assert.NotNull(logger);
@@ -88,7 +91,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         {
             var transport = new RecordingTransport();
 
-            GraylogSinkOptions options = transport.SinkOptions(o => o.Batching = new BatchingOptions
+            GraylogSinkOptions options = transport.SinkOptions(o => o.Delivery.Batching = new BatchingOptions
             {
                 EagerlyEmitFirstEvent = false,
                 BufferingTimeLimit = TimeSpan.FromMinutes(5)
@@ -104,7 +107,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         }
 
         [Fact]
-        public void ThereIsExactlyOneGraylogConvenienceOverload()
+        public void ThereIsExactlyOneGraylogOptionsOverload()
         {
             // Two convenience overloads starting (string, int, TransportType, ...) with everything
             // after optional would be ambiguous at the call site, and would also make
@@ -117,8 +120,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
                             && m.GetParameters()[0].ParameterType == typeof(LoggerSinkConfiguration))
                 .ToList();
 
-            Assert.Equal(2, graylogMethods.Count);
-            Assert.Equal(1, graylogMethods.Count(m => m.GetParameters().Length > 2));
+            Assert.Single(graylogMethods);
+            Assert.Equal(typeof(GraylogSinkOptions), graylogMethods[0].GetParameters()[1].ParameterType);
         }
 
         [Fact]

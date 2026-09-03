@@ -7,37 +7,27 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport
     using System.Net.Sockets;
 
     /// <summary>
-    /// Base class for resolve dns
+    /// The default <see cref="IDnsInfoProvider"/>, backed by <see cref="Dns"/>.
     /// </summary>
-    public interface IDnsInfoProvider
+    internal class DnsWrapper : IDnsInfoProvider
     {
         /// <summary>
         /// Gets the host addresses.
         /// </summary>
         /// <param name="hostNameOrAddress">The host name or address.</param>
-        /// <returns></returns>
-        Task<IPAddress[]> GetHostAddresses(string hostNameOrAddress);
-        Task<IPAddress?> GetIpAddress(string hostNameOrAddress);
-    }
-
-    public class DnsWrapper : IDnsInfoProvider
-    {
-        /// <summary>
-        /// Gets the host addresses.
-        /// </summary>
-        /// <param name="hostNameOrAddress">The host name or address.</param>
-        /// <returns></returns>
-        /// <exception cref="System.Net.Sockets.SocketException">When resolve <paramref name="hostNameOrAddress" /> trows exception.</exception>
+        /// <returns>Every address the name resolves to.</returns>
+        /// <exception cref="System.Net.Sockets.SocketException">Resolving <paramref name="hostNameOrAddress" /> failed.</exception>
         public Task<IPAddress[]> GetHostAddresses(string hostNameOrAddress)
         {
             return Dns.GetHostAddressesAsync(hostNameOrAddress);
         }
 
+        /// <inheritdoc />
         public async Task<IPAddress?> GetIpAddress(string hostNameOrAddress)
         {
             if (string.IsNullOrEmpty(hostNameOrAddress))
             {
-                return default;
+                return null;
             }
 
             var addresses = await GetHostAddresses(hostNameOrAddress).ConfigureAwait(false);

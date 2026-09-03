@@ -19,10 +19,17 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
         /// </summary>
         /// <param name="hostName">Name of the host.</param>
         /// <param name="options">The options.</param>
-        public ExceptionMessageBuilder(string hostName, GraylogSinkOptionsBase options) : base(hostName, options)
+        public ExceptionMessageBuilder(string hostName, GelfOptions options) : base(hostName, options)
         {
         }
 
+
+        /// <inheritdoc />
+        /// <remarks>
+        /// Adds <c>ExceptionSource</c>, <c>ExceptionType</c>, <c>ExceptionMessage</c> and
+        /// <c>StackTrace</c> properties to the event - flattened across inner exceptions, up to
+        /// <see cref="GelfOptions.StackTraceDepth"/> levels - and then builds the message as usual.
+        /// </remarks>
         public override JsonObject Build(LogEvent logEvent)
         {
             // GelfConverter only routes to this builder when logEvent.Exception is non-null.

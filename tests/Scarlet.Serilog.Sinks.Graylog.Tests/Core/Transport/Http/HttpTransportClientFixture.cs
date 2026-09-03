@@ -25,42 +25,44 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
     public class HttpTransportClientFixture
     {
         [Theory]
-        [InlineData("http://logs.example.org")]
-        [InlineData("http://logs.example.org/")]
-        public void ConfiguredClient_HostnameWithoutAPath_GetsTheConfiguredPort(string hostnameOrAddress)
+        [InlineData("http://logs.example.org:12201")]
+        [InlineData("http://logs.example.org:12201/")]
+        public void ConfiguredClient_EndpointWithoutAPath_KeepsTheConfiguredPort(string endpoint)
         {
-            using HttpClient client = Configure(OptionsFor(hostnameOrAddress));
+            using HttpClient client = Configure(OptionsFor(endpoint));
 
             Assert.NotNull(client.BaseAddress);
             Assert.Equal("http://logs.example.org:12201/", client.BaseAddress.ToString());
         }
 
         [Fact]
-        public void ConfiguredClient_UseSsl_ForcesTheHttpsScheme()
+        public void ConfiguredClient_WithAnHttpsEndpoint_KeepsTheHttpsScheme()
         {
-            using HttpClient client = Configure(OptionsFor("http://logs.example.org", o => o.UseSsl = true));
+            using HttpClient client = Configure(OptionsFor("https://logs.example.org:12201"));
 
             Assert.NotNull(client.BaseAddress);
             Assert.Equal("https://logs.example.org:12201/", client.BaseAddress.ToString());
         }
 
         [Fact]
-        public void ConfiguredClient_WithoutAPort_FallsBackTo443()
+        public void ConfiguredClient_WithoutAnExplicitPort_UsesTheSchemeDefault()
         {
-            using HttpClient client = Configure(OptionsFor("http://logs.example.org", o => o.Port = null));
+            using HttpClient client = Configure(OptionsFor("https://logs.example.org"));
 
             Assert.NotNull(client.BaseAddress);
-            Assert.Equal("http://logs.example.org:443/", client.BaseAddress.ToString());
+            Assert.Equal("https://logs.example.org/", client.BaseAddress.ToString());
+            Assert.Equal(443, client.BaseAddress.Port);
         }
 
         [Fact]
         public void ConfiguredClient_WithUsernameAndPassword_SendsBasicAuthentication()
         {
-            using HttpClient client = Configure(OptionsFor("http://logs.example.org", o =>
-            {
-                o.UsernameInHttp = "username";
-                o.PasswordInHttp = "password";
-            }));
+            using HttpClient client = Configure(OptionsFor("http://logs.example.org:12201", o =>
+                o.BasicAuthentication = new HttpBasicAuthenticationOptions
+                {
+                    Username = "username",
+                    Password = "password"
+                }));
 
             AuthenticationHeaderValue? authorization = client.DefaultRequestHeaders.Authorization;
 
@@ -78,11 +80,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
         [InlineData(null, null)]
         public void ConfiguredClient_WithAnIncompleteCredential_SendsNoAuthorizationHeader(string? username, string? password)
         {
-            using HttpClient client = Configure(OptionsFor("http://logs.example.org", o =>
-            {
-                o.UsernameInHttp = username;
-                o.PasswordInHttp = password;
-            }));
+            using HttpClient client = Configure(OptionsFor("http://logs.example.org:12201", o =>
+                o.BasicAuthentication = new HttpBasicAuthenticationOptions
+                {
+                    Username = username,
+                    Password = password
+                }));
 
             Assert.Null(client.DefaultRequestHeaders.Authorization);
         }
@@ -90,21 +93,29 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
         [Fact]
         public void ConfiguredClient_AsksForNoCachingAndNoExpectContinue()
         {
-            using HttpClient client = Configure(OptionsFor("http://logs.example.org"));
+            using HttpClient client = Configure(OptionsFor("http://logs.example.org:12201"));
 
             Assert.False(client.DefaultRequestHeaders.ExpectContinue);
             Assert.NotNull(client.DefaultRequestHeaders.CacheControl);
             Assert.True(client.DefaultRequestHeaders.CacheControl.NoCache);
         }
 
-        [Theory]
-        [InlineData(null)]
-        [InlineData("")]
-        public void ConfiguredClient_WithoutAHostname_Throws(string? hostnameOrAddress)
+        [Fact]
+        public void ConfiguredClient_WithoutAnEndpoint_Throws()
         {
-            var exception = Assert.Throws<InvalidOperationException>(() => Configure(OptionsFor(hostnameOrAddress)));
+            var exception = Assert.Throws<InvalidOperationException>(() => Configure(new HttpTransportOptions()));
 
-            Assert.Equal("The HostnameOrAddress value must be set.", exception.Message);
+            Assert.Equal("The HTTP endpoint must be an absolute URI.", exception.Message);
+        }
+
+        [Fact]
+        public void ConfiguredClient_WithARelativeEndpoint_Throws()
+        {
+            var options = new HttpTransportOptions { Endpoint = new Uri("logs.example.org", UriKind.Relative) };
+
+            var exception = Assert.Throws<InvalidOperationException>(() => Configure(options));
+
+            Assert.Equal("The HTTP endpoint must be an absolute URI.", exception.Message);
         }
 
         [Fact]
@@ -112,7 +123,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
         {
             const string message = "{\"short_message\":\"hello\"}";
 
-            using var target = new ProbeHttpTransportClient(OptionsFor("http://logs.example.org"));
+            using var target = new ProbeHttpTransportClient(OptionsFor("http://logs.example.org:12201"));
 
             await target.Send(message);
 
@@ -135,7 +146,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
         [Fact]
         public async Task Send_ConcurrentCalls_CreateOneSharedHttpClient()
         {
-            using var target = new ProbeHttpTransportClient(OptionsFor("http://logs.example.org"));
+            using var target = new ProbeHttpTransportClient(OptionsFor("http://logs.example.org:12201"));
 
             await Task.WhenAll(Enumerable.Range(0, 16).Select(_ => target.Send("{}")));
 
@@ -145,11 +156,14 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
         [Fact]
         public async Task Send_WithCustomHeaders_AddsThemToTheRequestAndOverridesBasicAuthentication()
         {
-            using var target = new ProbeHttpTransportClient(OptionsFor("http://logs.example.org", o =>
+            using var target = new ProbeHttpTransportClient(OptionsFor("http://logs.example.org:12201", o =>
             {
-                o.UsernameInHttp = "username";
-                o.PasswordInHttp = "password";
-                o.HttpHeaders = new Dictionary<string, string>
+                o.BasicAuthentication = new HttpBasicAuthenticationOptions
+                {
+                    Username = "username",
+                    Password = "password"
+                };
+                o.Headers = new Dictionary<string, string>
                 {
                     ["X-Graylog-Tenant"] = "payments",
                     ["Authorization"] = "Bearer proxy-token"
@@ -170,8 +184,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
         [Fact]
         public void ConfiguredClient_WithAContentTypeHeader_Throws()
         {
-            GraylogSinkOptions options = OptionsFor("http://logs.example.org", o =>
-                o.HttpHeaders = new Dictionary<string, string> { ["Content-Type"] = "text/plain" });
+            HttpTransportOptions options = OptionsFor("http://logs.example.org:12201", o =>
+                o.Headers = new Dictionary<string, string> { ["Content-Type"] = "text/plain" });
 
             InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => Configure(options));
 
@@ -179,12 +193,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
         }
 
         /// <summary>
-        /// A path on <c>HostnameOrAddress</c> is retained so a reverse proxy can route GELF requests.
+        /// A path on <c>Endpoint</c> is retained so a reverse proxy can route GELF requests.
         /// </summary>
         [Fact]
-        public async Task Send_WhenTheHostnameCarriesAPath_PostsBelowThatPath()
+        public async Task Send_WhenTheEndpointCarriesAPath_PostsBelowThatPath()
         {
-            using var target = new ProbeHttpTransportClient(OptionsFor("http://logs.example.org/testgelf"));
+            using var target = new ProbeHttpTransportClient(OptionsFor("http://logs.example.org:12201/testgelf"));
 
             await target.Send("{}");
 
@@ -199,18 +213,17 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
         public async Task Send_WhenTheServerRejectsTheMessage_Throws()
         {
             // Failures must surface: the batching sink retries on them and Emit reports them to SelfLog.
-            using var target = new ProbeHttpTransportClient(OptionsFor("http://logs.example.org"),
+            using var target = new ProbeHttpTransportClient(OptionsFor("http://logs.example.org:12201"),
                                                             HttpStatusCode.InternalServerError);
 
             await Assert.ThrowsAsync<HttpRequestException>(() => target.Send("{}"));
         }
 
-        private static GraylogSinkOptions OptionsFor(string? hostnameOrAddress, Action<GraylogSinkOptions>? configure = null)
+        private static HttpTransportOptions OptionsFor(string endpoint, Action<HttpTransportOptions>? configure = null)
         {
-            var options = new GraylogSinkOptions
+            var options = new HttpTransportOptions
             {
-                HostnameOrAddress = hostnameOrAddress,
-                Port = 12201
+                Endpoint = new Uri(endpoint)
             };
 
             configure?.Invoke(options);
@@ -222,7 +235,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
         /// <c>ConfigureHttpClient</c> only runs on the first <c>Send</c>, so a test that wants to look
         /// at the configured client without sending has to invoke it itself.
         /// </summary>
-        private static HttpClient Configure(GraylogSinkOptions options)
+        private static HttpClient Configure(HttpTransportOptions options)
         {
             using var probe = new ProbeHttpTransportClient(options);
 
@@ -233,7 +246,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
         {
             private int _createHttpClientCount;
 
-            public ProbeHttpTransportClient(GraylogSinkOptions options,
+            public ProbeHttpTransportClient(HttpTransportOptions options,
                                             HttpStatusCode status = HttpStatusCode.Accepted)
                 : base(options)
             {
