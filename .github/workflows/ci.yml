@@ -60,13 +60,19 @@ jobs:
           path: '**/TestResults/*.trx'
           if-no-files-found: ignore
 
-      # Microsoft Code Coverage writes one Cobertura report per target framework; gather them before upload.
+      # Microsoft Code Coverage writes one Cobertura report per test app and target framework, named with
+      # a bare GUID, and leaves an identical copy of each under a per-machine working directory - only the
+      # top level of TestResults holds the final reports. Each is renamed to contain "coverage" because the
+      # Codecov CLI discovers reports by filename pattern and does not recognise "*.cobertura.xml".
       - name: Collect coverage reports
         if: always()
         run: |
           mkdir -p coverage
-          find . -name '*.cobertura.xml' -print0 | while IFS= read -r -d '' f; do
-            cp "$f" "coverage/$(basename "$(dirname "$f")").$(basename "$f")"
+          i=0
+          for f in TestResults/*.cobertura.xml; do
+            [ -e "$f" ] || continue
+            i=$((i + 1))
+            cp "$f" "coverage/coverage-$i.cobertura.xml"
           done
           ls -l coverage
 
@@ -76,7 +82,7 @@ jobs:
         with:
           directory: ./coverage
           token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
+          fail_ci_if_error: true
 
       - name: Upload packages
         uses: actions/upload-artifact@v4

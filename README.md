@@ -5,9 +5,10 @@ A maintained fork of [Serilog.Sinks.Graylog](https://github.com/whir1/serilog-si
 ## Status
 
 [![CI](https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/actions/workflows/ci.yml/badge.svg)](https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/actions/workflows/ci.yml)
-
-[![NuGet](https://img.shields.io/nuget/v/Scarlet.Serilog.Sinks.Graylog.svg)](https://www.nuget.org/packages/Scarlet.Serilog.Sinks.Graylog/)
-[![Downloads](https://img.shields.io/nuget/dt/Scarlet.Serilog.Sinks.Graylog.svg)](https://www.nuget.org/packages/Scarlet.Serilog.Sinks.Graylog/)
+[![codecov](https://codecov.io/github/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/graph/badge.svg?token=078OUYMY7Z)](https://codecov.io/github/ScarletKuro/Scarlet.Serilog.Sinks.Graylog)
+[![Nuget](https://img.shields.io/nuget/v/Scarlet.Serilog.Sinks.Graylog?color=ff4081&logo=nuget)](https://www.nuget.org/packages/Scarlet.Serilog.Sinks.Graylog/)
+[![Nuget](https://img.shields.io/nuget/dt/Scarlet.Serilog.Sinks.Graylog?color=ff4081&label=nuget%20downloads&logo=nuget)](https://www.nuget.org/packages/Scarlet.Serilog.Sinks.Graylog/)
+[![GitHub](https://img.shields.io/github/license/ScarletKuro/Scarlet.Serilog.Sinks.Graylog?color=594ae2&logo=github)](https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/blob/main/LICENSE)
 
 ## Migrating from Serilog.Sinks.Graylog
 
