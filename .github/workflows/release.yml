@@ -2,18 +2,10 @@ name: Release
 
 on:
   push:
-    tags: [ 'v*' ]
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Package version override (blank = use the <Version> in each .csproj)'
-        required: false
-        type: string
-      dry_run:
-        description: 'Build and pack, but do not push to nuget.org'
-        required: false
-        type: boolean
-        default: false
+    tags:
+      # Matches SemVer release tags: 1.0.0, 1.0.0-preview.1, 1.0.0-rc.1, etc.
+      - '[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+-*'
 
 env:
   DOTNET_NOLOGO: true
@@ -28,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: write
+      id-token: write
 
     steps:
       - name: Checkout
@@ -40,51 +34,63 @@ jobs:
             8.0.x
             10.0.x
 
-      # A tag only triggers the release; the version still comes from the csproj
-      # files unless explicitly overridden via workflow_dispatch.
-      - name: Resolve version argument
-        id: version
+      - name: Extract version from tag
+        id: get_version
+        shell: bash
         run: |
-          if [ -n "${{ inputs.version }}" ]; then
-            echo "arg=-p:Version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "arg=" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+
+          version="$GITHUB_REF_NAME"
+
+          if [[ ! "$version" =~ ^[0-9]+(\.[0-9]+){2}(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "::error::Tag '$GITHUB_REF_NAME' is not a valid SemVer package version. Use 4.0.0 or 9.0.0-preview.2."
+            exit 1
           fi
+
+          echo "version=$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Restore
         run: dotnet restore ${{ env.SOLUTION }}
 
       - name: Build
-        run: dotnet build ${{ env.SOLUTION }} -c Release --no-restore ${{ steps.version.outputs.arg }}
+        run: dotnet build ${{ env.SOLUTION }} -c Release --no-restore -p:Version=${{ steps.get_version.outputs.version }}
 
       - name: Test
         run: >
           dotnet test ${{ env.SOLUTION }} -c Release --no-restore
+          -p:Version=${{ steps.get_version.outputs.version }}
           --filter-not-trait "Category=Integration"
 
       - name: Pack
         run: |
           dotnet pack src/Scarlet.Serilog.Sinks.Graylog/Scarlet.Serilog.Sinks.Graylog.csproj \
-            -c Release --no-restore -o artifacts --include-symbols -p:SymbolPackageFormat=snupkg ${{ steps.version.outputs.arg }}
+            -c Release --no-restore -o artifacts/packages --include-symbols -p:SymbolPackageFormat=snupkg -p:Version=${{ steps.get_version.outputs.version }}
+
+      - name: NuGet login
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Publish to NuGet.org
+        shell: bash
+        run: |
+          dotnet nuget push "artifacts/packages/*.nupkg" \
+            --source https://api.nuget.org/v3/index.json \
+            --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" \
+            --skip-duplicate
+
+      - name: Publish to GitHub Packages
+        shell: bash
+        run: |
+          dotnet nuget push "artifacts/packages/*.nupkg" \
+            --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
+            --api-key "${{ secrets.GITHUB_TOKEN }}" \
+            --skip-duplicate
 
       - name: Upload packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: packages
-          path: |
-            artifacts/*.nupkg
-            artifacts/*.snupkg
-
-      - name: Push to nuget.org
-        if: ${{ !inputs.dry_run }}
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-        run: |
-          if [ -z "$NUGET_API_KEY" ]; then
-            echo "::error::NUGET_API_KEY secret is not set."
-            exit 1
-          fi
-          dotnet nuget push "artifacts/*.nupkg" \
-            --source https://api.nuget.org/v3/index.json \
-            --api-key "$NUGET_API_KEY" \
-            --skip-duplicate
+          path: artifacts/packages
