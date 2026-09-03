@@ -89,31 +89,23 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
 
         private JsonTypeInfo? ResolveContract(Type type)
         {
-            // System.Text.Json documents Type and MemberInfo as unsupported, and both resolving a contract
-            // and serializing one throw. These reach a sink whenever '{@Property}' captures a Type or a
-            // MemberInfo, which Serilog's ReflectionTypesScalarDestructuringPolicy passes through as-is.
+            // Type and MemberInfo do resolve a contract, but serializing one throws. They reach a sink
+            // whenever '{@Property}' captures a Type or a MemberInfo, which Serilog's
+            // ReflectionTypesScalarDestructuringPolicy passes through as-is, so they are short-circuited
+            // rather than left to cost a throw on first use.
             if (typeof(MemberInfo).IsAssignableFrom(type))
             {
                 return null;
             }
 
-            try
+            if (!TryEnsureResolver())
             {
-                if (!TryEnsureResolver())
-                {
-                    return null;
-                }
-
-                return _options.GetTypeInfo(type);
-            } catch (InvalidOperationException)
-            {
-                // Reflection-based serialization is disabled and no resolver was supplied - the Native AOT case.
-                return null;
-            } catch (NotSupportedException)
-            {
-                // No converter available for this type.
                 return null;
             }
+
+            // Reports a missing contract rather than throwing for it - which is the Native AOT case, and
+            // any type the resolver does not cover. GetTypeInfo threw NotSupportedException for both.
+            return _options.TryGetTypeInfo(type, out JsonTypeInfo? typeInfo) ? typeInfo : null;
         }
 
         /// <summary>
