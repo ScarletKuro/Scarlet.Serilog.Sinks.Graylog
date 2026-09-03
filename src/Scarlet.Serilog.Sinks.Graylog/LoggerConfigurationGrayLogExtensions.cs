@@ -1,7 +1,5 @@
 using Serilog.Configuration;
-using Serilog.Core;
 using Serilog;
-using Scarlet.Serilog.Sinks.Graylog;
 using System;
 
 namespace Scarlet.Serilog.Sinks.Graylog;
@@ -30,6 +28,6 @@ public static class LoggerConfigurationGrayLogExtensions
         var sink = new GraylogSink(options);
         return options.Delivery.Batching is { } batchingOptions
             ? loggerSinkConfiguration.Sink(sink, batchingOptions, options.Delivery.MinimumLevel)
-            : loggerSinkConfiguration.Sink((ILogEventSink)sink, options.Delivery.MinimumLevel);
+            : loggerSinkConfiguration.Sink(sink, options.Delivery.MinimumLevel);
     }
 }

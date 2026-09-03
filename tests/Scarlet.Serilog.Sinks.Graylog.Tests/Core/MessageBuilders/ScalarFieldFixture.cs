@@ -71,6 +71,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
             // Enums are numeric, which is what System.Text.Json does by default.
             yield return new object[] { LogEventLevel.Warning, "3" };
             yield return new object[] { ByteEnum.Value, "200" };
+            yield return new object[] { SByteEnum.Negative, "-100" };
+            yield return new object[] { ShortEnum.Negative, "-30000" };
+            yield return new object[] { UShortEnum.Max, "65535" };
+            yield return new object[] { UIntEnum.Max, "4294967295" };
             yield return new object[] { UlongEnum.Max, "18446744073709551615" };
             yield return new object[] { LongEnum.Negative, "-5" };
             yield return new object[] { (ByteEnum)77, "77" };
@@ -198,6 +202,24 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
             Assert.Equal("{\"alpha\":\"one\",\"2\":\"two\"}", actual.Json("_Val"));
         }
 
+        /// <summary>
+        /// A value the reflection-free path has no case for falls back to its own rendering, which is
+        /// what Serilog does with an unknown scalar too.
+        /// </summary>
+        /// <remarks>
+        /// Asserted on the reflection-free path only: the contract path resolves a contract for such a
+        /// type and serializes it as a JSON object, so the two paths cannot share an expectation here.
+        /// </remarks>
+        [Fact]
+        public void Build_AnUnknownTypeWithoutContract_IsWrittenAsItsOwnRendering()
+        {
+            GelfMessageBuilder messageBuilder = new("localhost", OptionsWith(NoContracts()));
+
+            string actual = FieldJson(messageBuilder, new Unknown());
+
+            Assert.Equal("\"unknown-value\"", actual);
+        }
+
         private static GelfOptions OptionsWith(JsonSerializerOptions serializerOptions)
         {
             return new GelfOptions
@@ -240,9 +262,37 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
                 => writer.WriteStringValue(value.ToUpperInvariant());
         }
 
+        /// <summary>
+        /// A type no contract covers, and that nothing else in the switch matches.
+        /// </summary>
+        private sealed class Unknown
+        {
+            public override string ToString() => "unknown-value";
+        }
+
         private enum ByteEnum : byte
         {
             Value = 200
+        }
+
+        private enum SByteEnum : sbyte
+        {
+            Negative = -100
+        }
+
+        private enum ShortEnum : short
+        {
+            Negative = -30000
+        }
+
+        private enum UShortEnum : ushort
+        {
+            Max = ushort.MaxValue
+        }
+
+        private enum UIntEnum : uint
+        {
+            Max = uint.MaxValue
         }
 
         private enum UlongEnum : ulong

@@ -1,10 +1,13 @@
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http;
+using Scarlet.Serilog.Sinks.Graylog.Tests.Fakes;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -235,6 +238,113 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
             await Assert.ThrowsAsync<HttpRequestException>(() => target.Send("{}"));
         }
 
+        [Theory]
+        [InlineData("")]
+        [InlineData("   ")]
+        public void ConfiguredClient_WithABlankHeaderName_Throws(string headerName)
+        {
+            HttpTransportOptions options = OptionsFor("http://logs.example.org:12201", o =>
+                o.Headers = new Dictionary<string, string> { [headerName] = "value" });
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => Configure(options));
+
+            Assert.Equal("HTTP header names must not be empty.", exception.Message);
+        }
+
+        /// <summary>
+        /// A content-level header cannot go on the default request headers at all, so it is refused
+        /// rather than silently dropped.
+        /// </summary>
+        /// <remarks>
+        /// The message comes from <c>HttpHeaders</c> itself: the transport removes a header before
+        /// adding it, and <c>Remove</c> rejects a misused name before the add is ever attempted.
+        /// </remarks>
+        [Fact]
+        public void ConfiguredClient_WithAContentLevelHeader_Throws()
+        {
+            HttpTransportOptions options = OptionsFor("http://logs.example.org:12201", o =>
+                o.Headers = new Dictionary<string, string> { ["Content-Length"] = "42" });
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => Configure(options));
+
+            Assert.Contains("Content-Length", exception.Message);
+        }
+
+        /// <summary>
+        /// A client certificate needs a handler carrying it, which is a different construction path
+        /// from the plain client.
+        /// </summary>
+        [Fact]
+        public void CreatedClient_WithAClientCertificate_LoadsItOntoAHandler()
+        {
+            using TestCertificates.PfxFile certificate = TestCertificates.WritePfx("secret");
+            HttpTransportOptions options = OptionsFor("https://logs.example.org:12201", o => o.Tls = new TlsOptions
+            {
+                ClientCertificatePath = certificate.Path,
+                ClientCertificatePassword = "secret"
+            });
+
+            using var target = new RealHttpClientTransportClient(options);
+
+            using HttpClient client = target.Create();
+
+            Assert.NotNull(client);
+        }
+
+        [Fact]
+        public void CreatedClient_WithAnInMemoryClientCertificate_LoadsItOntoAHandler()
+        {
+            using X509Certificate2 certificate = TestCertificates.CreateSelfSigned();
+            HttpTransportOptions options = OptionsFor("https://logs.example.org:12201",
+                                                     o => o.Tls = new TlsOptions { ClientCertificate = certificate });
+
+            using var target = new RealHttpClientTransportClient(options);
+
+            using HttpClient client = target.Create();
+
+            Assert.NotNull(client);
+        }
+
+        /// <summary>
+        /// A certificate the caller supplied is theirs: the handler holds it for the life of the
+        /// client, but disposing the transport must not release the caller's key.
+        /// </summary>
+        [Fact]
+        public void Dispose_WithAnInMemoryClientCertificate_LeavesTheCallersCertificateAlone()
+        {
+            using X509Certificate2 source = TestCertificates.CreateSelfSigned();
+            var certificate = new TrackingCertificate(source);
+
+            try
+            {
+                HttpTransportOptions options = OptionsFor("https://logs.example.org:12201",
+                                                          o => o.Tls = new TlsOptions { ClientCertificate = certificate });
+
+                var target = new RealHttpClientTransportClient(options);
+                target.Create().Dispose();
+
+                target.Dispose();
+
+                Assert.Equal(0, certificate.DisposeCount);
+            } finally
+            {
+                certificate.Dispose();
+            }
+        }
+
+        [Fact]
+        public void CreatedClient_WithAMissingClientCertificate_Throws()
+        {
+            HttpTransportOptions options = OptionsFor("https://logs.example.org:12201", o => o.Tls = new TlsOptions
+            {
+                ClientCertificatePath = "certificate-that-does-not-exist.pfx"
+            });
+
+            using var target = new RealHttpClientTransportClient(options);
+
+            Assert.Throws<FileNotFoundException>(() => target.Create());
+        }
+
         private static HttpTransportOptions OptionsFor(string endpoint, Action<HttpTransportOptions>? configure = null)
         {
             var options = new HttpTransportOptions
@@ -287,6 +397,42 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
             {
                 Interlocked.Increment(ref _createHttpClientCount);
                 return new HttpClient(Handler);
+            }
+        }
+
+        /// <summary>
+        /// Exposes the real <c>CreateHttpClient</c> instead of replacing it, so the handler the
+        /// transport builds for a client certificate is the one under test.
+        /// </summary>
+        private sealed class RealHttpClientTransportClient : HttpTransportClient
+        {
+            public RealHttpClientTransportClient(HttpTransportOptions options)
+                : base(options)
+            {
+            }
+
+            public HttpClient Create()
+            {
+                return CreateHttpClient();
+            }
+        }
+
+        /// <summary>
+        /// A certificate that records whether anything disposed it.
+        /// </summary>
+        private sealed class TrackingCertificate : X509Certificate2
+        {
+            public TrackingCertificate(X509Certificate2 source)
+                : base(source)
+            {
+            }
+
+            public int DisposeCount { get; private set; }
+
+            protected override void Dispose(bool disposing)
+            {
+                DisposeCount++;
+                base.Dispose(disposing);
             }
         }
 

@@ -137,6 +137,22 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             Assert.NotNull(logger);
         }
 
+        [Fact]
+        public void Graylog_WithoutASinkConfiguration_Throws()
+        {
+            Assert.Equal("loggerSinkConfiguration", Assert.Throws<ArgumentNullException>(
+                () => LoggerConfigurationGrayLogExtensions.Graylog(null!, new GraylogSinkOptions())).ParamName);
+        }
+
+        [Fact]
+        public void Graylog_WithoutOptions_Throws()
+        {
+            var loggerConfig = new LoggerConfiguration();
+
+            Assert.Equal("options", Assert.Throws<ArgumentNullException>(
+                () => loggerConfig.WriteTo.Graylog(null!)).ParamName);
+        }
+
         /// <summary>
         /// Reads an embedded JSON configuration file. <see cref="Assembly.GetManifestResourceStream(string)"/>
         /// returns null when the resource is not embedded, which would otherwise surface as an

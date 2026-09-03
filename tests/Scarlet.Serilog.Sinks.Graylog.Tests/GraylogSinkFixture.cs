@@ -1,52 +1,22 @@
-using NSubstitute;
 using Scarlet.Serilog.Sinks.Graylog.Tests.Fakes;
 using Serilog;
-using Serilog.Core;
 using Serilog.Debugging;
-using Serilog.Events;
-using Serilog.Parsing;
-using Scarlet.Serilog.Sinks.Graylog.Core;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
 namespace Scarlet.Serilog.Sinks.Graylog.Tests
 {
+    /// <summary>
+    /// Shares a collection with the other classes that drive <c>SelfLog</c>: it is a single global
+    /// handler, so two classes enabling it at once clobber each other's assertions.
+    /// </summary>
+    [Collection(SelfLogCollection.Name)]
     public class GraylogSinkFixture
     {
-        [Fact(Skip = "This test not work anymore because IMessageBuilder gets from internal dictionary")]
-        public void WhenEmit_ThenSendData()
-        {
-            var gelfConverter = Substitute.For<IGelfConverter>();
-            var transport = Substitute.For<ITransport>();
-
-            var options = new GraylogSinkOptions
-            {
-                Message = new GelfOptions { Converter = gelfConverter },
-                TransportType = TransportType.Udp,
-                Udp = new UdpTransportOptions { Host = "localhost" }
-            };
-
-            GraylogSink target = new(options);
-
-            var logEvent = new LogEvent(DateTimeOffset.Now, LogEventLevel.Fatal, null,
-                new MessageTemplate("O_o", new List<MessageTemplateToken>()), new List<LogEventProperty>());
-
-            transport.Send(JsonSerializer.Serialize(new { })).Returns(Task.CompletedTask);
-
-
-            //gelfConverter.GetGelfJson(logEvent).Returns(jObject);
-
-            target.Emit(logEvent);
-
-            transport.Received().Send(Arg.Any<string>());
-        }
-
         /// <summary>
         /// Emit must never wait on the send. Blocking deadlocks a caller whose synchronization context
         /// is single-threaded, because the continuation needs the thread that is blocked.
@@ -299,6 +269,66 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
                 {
                     TransportType = TransportType.Custom
                 }));
+        }
+
+        [Fact]
+        public void Constructor_WithoutOptions_Throws()
+        {
+            Assert.Equal("options", Assert.Throws<ArgumentNullException>(() => new GraylogSink(null!)).ParamName);
+        }
+
+        /// <summary>
+        /// Serilog calls whichever disposal the sink offers, and a container may well call both.
+        /// </summary>
+        [Fact]
+        public async Task DisposeAsync_AfterDispose_DoesNothingMore()
+        {
+            using var transport = new RecordingTransport();
+            var sink = new GraylogSink(transport.SinkOptions());
+            sink.Emit(LogEventSource.GetSimpleLogEvent(DateTimeOffset.UnixEpoch));
+
+            sink.Dispose();
+            await sink.DisposeAsync();
+
+            Assert.Equal(1, transport.DisposeCount);
+        }
+
+        /// <summary>
+        /// Disposal has to finish even when reporting the failure fails: a SelfLog sink that throws
+        /// would otherwise take the exception out of Dispose and into the shutdown path.
+        /// </summary>
+        [Fact]
+        public void Dispose_WhenReportingAFailedSendThrows_StillCompletes()
+        {
+            const string failure = "graylog refused the batch while self log was broken";
+            RecordingTransport transport = new(async _ =>
+            {
+                await Task.Delay(150);
+                throw new InvalidOperationException(failure);
+            });
+
+            var sink = new GraylogSink(transport.SinkOptions());
+
+            // SelfLog is global and other classes run in parallel, so break it only for this failure.
+            SelfLog.Enable(message =>
+            {
+                if (message.Contains(failure))
+                {
+                    throw new InvalidOperationException("the self log sink is broken too");
+                }
+            });
+
+            try
+            {
+                sink.Emit(LogEventSource.GetSimpleLogEvent(DateTimeOffset.UnixEpoch));
+
+                sink.Dispose();
+            } finally
+            {
+                SelfLog.Disable();
+            }
+
+            Assert.Equal(1, transport.DisposeCount);
         }
 
         /// <summary>

@@ -99,6 +99,23 @@ internal static class GraylogSinkOptionsValidator
 
         if (string.IsNullOrWhiteSpace(tls.ServerName) && tls.ServerName != null)
             throw new ArgumentException($"The {transport} TLS server name cannot be empty.", nameof(tls.ServerName));
+
+        if (tls.ClientCertificate != null)
+        {
+            if (tls.ClientCertificatePath != null)
+                throw new ArgumentException($"The {transport} TLS options cannot set both a client certificate and a client certificate path.", nameof(tls.ClientCertificate));
+            // Meaningless for an already-loaded certificate, and quietly ignoring it would leave the
+            // impression that a password was applied.
+            if (tls.ClientCertificatePassword != null)
+                throw new ArgumentException($"The {transport} TLS client certificate password applies to a certificate file; a client certificate supplied in memory needs none.", nameof(tls.ClientCertificatePassword));
+            // Without one there is no way to answer the server's certificate request, and the
+            // handshake fails well away from the configuration that caused it.
+            if (!tls.ClientCertificate.HasPrivateKey)
+                throw new ArgumentException($"The {transport} TLS client certificate must have a private key.", nameof(tls.ClientCertificate));
+
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(tls.ClientCertificatePath) && tls.ClientCertificatePassword != null)
             throw new ArgumentException($"The {transport} TLS client certificate password requires a certificate path.", nameof(tls.ClientCertificatePassword));
     }

@@ -30,6 +30,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
         private readonly SemaphoreSlim _sendLock = new(1, 1);
         private TcpClient? _client;
         private X509Certificate2? _clientCertificate;
+        private bool _ownsClientCertificate;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TcpTransportClient"/> class.
@@ -104,18 +105,23 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
 
                 if (!string.IsNullOrWhiteSpace(sslHost))
                 {
-                    var sslStream = new SslStream(stream, false);
+                    var sslStream = new SslStream(stream, false,
+                        (sender, certificate, chain, errors) => ValidateServerCertificate(sender, certificate, chain, errors));
 
                     // Adopted before the handshake, so a failure below disposes it too.
                     stream = sslStream;
 
                     var certificates = new X509CertificateCollection();
-                    if (!string.IsNullOrWhiteSpace(_options.Tls?.ClientCertificatePath))
+                    if (TlsCertificateLoader.HasClientCertificate(_options.Tls))
                     {
-                        // Loaded once and reused for the life of the client. Connect runs again on
+                        // Resolved once and reused for the life of the client. Connect runs again on
                         // every reconnect, and loading here pulled the PFX off disk each time and took
                         // an unmanaged key handle that nothing released.
-                        _clientCertificate ??= TlsCertificateLoader.LoadClientCertificate(_options.Tls!);
+                        if (_clientCertificate == null)
+                        {
+                            (_clientCertificate, _ownsClientCertificate) = TlsCertificateLoader.ResolveClientCertificate(_options.Tls!);
+                        }
+
                         certificates.Add(_clientCertificate);
                     }
 
@@ -143,6 +149,28 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
                 client.Dispose();
                 throw;
             }
+        }
+
+        /// <summary>
+        /// Validates the certificate the Graylog server presents during the TLS handshake.
+        /// </summary>
+        /// <param name="sender">The <see cref="SslStream"/> performing the handshake.</param>
+        /// <param name="certificate">The certificate the server presented, if any.</param>
+        /// <param name="chain">The chain built for <paramref name="certificate"/>, if any.</param>
+        /// <param name="sslPolicyErrors">The errors the platform found while validating.</param>
+        /// <returns><c>true</c> to continue the handshake; <c>false</c> to fail it.</returns>
+        /// <remarks>
+        /// The default applies the platform's own policy - the certificate is accepted only when it
+        /// validated without error. Override this to accept a certificate the platform does not trust,
+        /// which is what a Graylog input with a self-signed certificate needs.
+        /// </remarks>
+        protected virtual bool ValidateServerCertificate(
+            object sender,
+            X509Certificate? certificate,
+            X509Chain? chain,
+            SslPolicyErrors sslPolicyErrors)
+        {
+            return sslPolicyErrors == SslPolicyErrors.None;
         }
 
         private async Task ConnectWithTimeout(TcpClient client, IPAddress address, int port)
@@ -206,13 +234,24 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
         /// Releases the resources used by this client.
         /// </summary>
         /// <param name="disposing"><c>true</c> when called from <see cref="Dispose()"/>; the stream and socket are closed with it.</param>
+        /// <remarks>
+        /// A client certificate supplied through <see cref="TlsOptions.ClientCertificate"/> belongs to
+        /// the caller and is left alone; only one loaded from
+        /// <see cref="TlsOptions.ClientCertificatePath"/> is disposed here.
+        /// </remarks>
         protected virtual void Dispose(bool disposing)
         {
             if (disposing)
             {
                 CloseConnection();
-                _clientCertificate?.Dispose();
+
+                if (_ownsClientCertificate)
+                {
+                    _clientCertificate?.Dispose();
+                }
+
                 _clientCertificate = null;
+                _ownsClientCertificate = false;
             }
         }
     }

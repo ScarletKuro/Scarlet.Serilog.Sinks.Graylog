@@ -23,5 +23,31 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Tcp
             byte[] expected = Encoding.UTF8.GetBytes(message + "\0");
             await transportClient.Received(1).Send(Arg.Is<byte[]>((byte[] value) => value.SequenceEqual(expected)));
         }
+
+        /// <summary>
+        /// The transport owns its client, so disposing the sink has to close the connection.
+        /// </summary>
+        [Fact]
+        public void Dispose_DisposesTheTransportClient()
+        {
+            var transportClient = Substitute.For<ITransportClient<byte[]>>();
+            var target = new TcpTransport(transportClient);
+
+            target.Dispose();
+
+            transportClient.Received(1).Dispose();
+        }
+
+        [Fact]
+        public void Dispose_CalledTwice_DisposesTheTransportClientAgainWithoutFailing()
+        {
+            var transportClient = Substitute.For<ITransportClient<byte[]>>();
+            var target = new TcpTransport(transportClient);
+
+            target.Dispose();
+            target.Dispose();
+
+            transportClient.Received(2).Dispose();
+        }
     }
 }

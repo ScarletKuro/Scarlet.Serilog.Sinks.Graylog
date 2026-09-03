@@ -123,8 +123,42 @@ Graylog server. The sink validates the server certificate against the client mac
 operating-system trust store. Install a private CA there before connecting to an internally signed
 Graylog certificate.
 
-Mutual TLS is available for TCP and HTTPS through `TlsOptions.ClientCertificatePath` (a PFX) and
-`ClientCertificatePassword`. GELF over UDP does not support TLS.
+For TCP, `TcpTransportClient.ValidateServerCertificate` is `protected virtual`, so a subclass can
+accept a certificate the operating system does not trust - a self-signed certificate on a Graylog
+input, for instance - without installing anything. The default accepts a certificate only when it
+validated without error. Wire the subclass up through `CustomTransportOptions.Factory`:
+
+```csharp
+internal sealed class PinnedTcpTransportClient : TcpTransportClient
+{
+    public PinnedTcpTransportClient(TcpTransportOptions options, IDnsInfoProvider dns)
+        : base(options, dns)
+    {
+    }
+
+    protected override bool ValidateServerCertificate(object sender, X509Certificate? certificate,
+                                                      X509Chain? chain, SslPolicyErrors sslPolicyErrors)
+        => certificate?.GetCertHashString() == "THE-EXPECTED-THUMBPRINT";
+}
+```
+
+Mutual TLS is available for TCP and HTTPS. Supply the client certificate either as a PFX on disk,
+through `TlsOptions.ClientCertificatePath` and `ClientCertificatePassword`, or already loaded,
+through `TlsOptions.ClientCertificate`:
+
+```csharp
+Tls = new TlsOptions { ClientCertificate = certificateFromYourSecretStore }
+```
+
+The in-memory option suits a certificate fetched from a secret store or read out of a certificate
+store, which would otherwise have to be written to disk just to be configured. It must carry a
+private key, and it cannot be combined with `ClientCertificatePath`. The certificate stays yours:
+the sink neither copies nor disposes it, so one instance can be shared between sinks and outlive
+them - dispose it once every logger using it is closed. It is settable in code only, because
+`Serilog.Settings.Configuration` cannot bind a certificate from JSON; configuration-driven setups
+use `ClientCertificatePath`.
+
+GELF over UDP does not support TLS.
 
 ### HTTP custom headers
 

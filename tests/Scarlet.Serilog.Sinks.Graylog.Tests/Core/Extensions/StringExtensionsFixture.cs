@@ -74,6 +74,41 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Extensions
             Assert.Equal(expected, actual);
         }
 
+        /// <summary>
+        /// What an uncompressed UDP datagram carries.
+        /// </summary>
+        [Theory]
+        [InlineData("GELF message")]
+        [InlineData("Ω 日本語 🚀")]
+        [InlineData("")]
+        public void ToByteArray_ReturnsTheUtf8Bytes(string given)
+        {
+            byte[] actual = given.ToByteArray();
+
+            Assert.Equal(Encoding.UTF8.GetBytes(given), actual);
+        }
+
+        [Fact]
+        public void Expand_ReplacesEnvironmentVariables()
+        {
+            const string variable = "SCARLET_GRAYLOG_EXPAND_TEST";
+            Environment.SetEnvironmentVariable(variable, "graylog.example.org");
+
+            try
+            {
+                Assert.Equal("graylog.example.org", $"%{variable}%".Expand());
+            } finally
+            {
+                Environment.SetEnvironmentVariable(variable, null);
+            }
+        }
+
+        [Fact]
+        public void Expand_WithoutAnyVariable_ReturnsTheSourceUnchanged()
+        {
+            Assert.Equal("graylog.example.org", "graylog.example.org".Expand());
+        }
+
         private static string Decompress(byte[] compressed)
         {
             using var input = new MemoryStream(compressed);

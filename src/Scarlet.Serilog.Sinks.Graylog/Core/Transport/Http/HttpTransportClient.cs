@@ -3,6 +3,7 @@ using System;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -26,6 +27,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
         private readonly HttpTransportOptions _options;
 
         /// <summary>
+        /// A client certificate this client loaded itself, and therefore has to dispose. Only ever
+        /// assigned inside the <see cref="Lazy{T}"/> factory, so no synchronization is needed.
+        /// </summary>
+        private X509Certificate2? _ownedClientCertificate;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="HttpTransportClient"/> class.
         /// </summary>
         /// <param name="options">The HTTP transport options.</param>
@@ -41,11 +48,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
         /// </summary>
         /// <returns>
         /// A plain client, or one over a handler carrying the client certificate when
-        /// <see cref="TlsOptions.ClientCertificatePath"/> is set.
+        /// <see cref="TlsOptions.ClientCertificate"/> or <see cref="TlsOptions.ClientCertificatePath"/>
+        /// is set.
         /// </returns>
         protected virtual HttpClient CreateHttpClient()
         {
-            if (string.IsNullOrWhiteSpace(_options.Tls?.ClientCertificatePath))
+            if (!TlsCertificateLoader.HasClientCertificate(_options.Tls))
             {
                 return new HttpClient();
             }
@@ -56,7 +64,15 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
  #else
             var handler = new HttpClientHandler();
  #endif
-            handler.ClientCertificates.Add(TlsCertificateLoader.LoadClientCertificate(_options.Tls!));
+            // The handler holds the certificate for the life of the client but never disposes the
+            // collection's contents, so anything loaded here is this client's to release.
+            (X509Certificate2 certificate, bool owned) = TlsCertificateLoader.ResolveClientCertificate(_options.Tls!);
+            if (owned)
+            {
+                _ownedClientCertificate = certificate;
+            }
+
+            handler.ClientCertificates.Add(certificate);
             return new HttpClient(handler, true);
         }
 
@@ -170,6 +186,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
         /// Releases the resources used by this client.
         /// </summary>
         /// <param name="disposing"><c>true</c> when called from <see cref="Dispose()"/>; the <see cref="HttpClient"/> is disposed with it, if one was ever created.</param>
+        /// <remarks>
+        /// A client certificate loaded from <see cref="TlsOptions.ClientCertificatePath"/> is released
+        /// after the <see cref="HttpClient"/>, so nothing still in flight is using its key. One
+        /// supplied through <see cref="TlsOptions.ClientCertificate"/> belongs to the caller and is
+        /// left alone.
+        /// </remarks>
         protected virtual void Dispose(bool disposing)
         {
             if (disposing)
@@ -178,6 +200,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
                 {
                     _httpClient.Value.Dispose();
                 }
+
+                _ownedClientCertificate?.Dispose();
+                _ownedClientCertificate = null;
             }
         }
     }

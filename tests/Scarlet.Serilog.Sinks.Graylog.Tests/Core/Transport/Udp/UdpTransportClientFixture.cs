@@ -2,6 +2,8 @@ using AutoFixture;
 using NSubstitute;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp;
+using Scarlet.Serilog.Sinks.Graylog.Tests.Fakes;
+using Serilog.Debugging;
 using System;
 using System.Diagnostics;
 using System.Linq;
@@ -13,8 +15,11 @@ using Xunit;
 
 namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
 {
+    [Collection(SelfLogCollection.Name)]
     public class UdpTransportClientFixture
     {
+        private const string Host = "graylog.example.org";
+
         [Fact]
         public async Task Send_WithoutAHostname_ThrowsAClearError()
         {
@@ -28,6 +33,57 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
         }
 
         /// <summary>
+        /// With no address ever resolved there is nothing to fall back to, so the send has to fail
+        /// rather than drop the event silently.
+        /// </summary>
+        [Fact]
+        public async Task Send_WhenTheHostNeverResolved_ThrowsAndReportsToSelfLog()
+        {
+            const string host = "scarlet-graylog-unresolvable.example.org";
+            var dnsInfoProvider = Substitute.For<IDnsInfoProvider>();
+            dnsInfoProvider.GetIpAddress(host).Returns(Task.FromResult<IPAddress?>(null));
+            using var target = new UdpTransportClient(new UdpTransportOptions { Host = host }, dnsInfoProvider);
+
+            int reported = 0;
+
+            // SelfLog is global and other classes run in parallel, so react only to this host.
+            SelfLog.Enable(message =>
+            {
+                if (message.Contains("did not resolve to a usable address"))
+                {
+                    Interlocked.Increment(ref reported);
+                }
+            });
+
+            try
+            {
+                InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(() => target.Send(new byte[] { 1 }));
+
+                Assert.Equal("The Graylog endpoint could not be resolved.", exception.Message);
+                Assert.Equal(1, Volatile.Read(ref reported));
+            } finally
+            {
+                SelfLog.Disable();
+            }
+        }
+
+        /// <summary>
+        /// A resolver that throws is the same situation as one that resolved nothing.
+        /// </summary>
+        [Fact]
+        public async Task Send_WhenTheResolverThrowsAndNothingWasResolvedBefore_Throws()
+        {
+            const string host = "scarlet-graylog-throwing.example.org";
+            var dnsInfoProvider = Substitute.For<IDnsInfoProvider>();
+            dnsInfoProvider.GetIpAddress(host).Returns<Task<IPAddress?>>(_ => throw new SocketException());
+            using var target = new UdpTransportClient(new UdpTransportOptions { Host = host }, dnsInfoProvider);
+
+            InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(() => target.Send(new byte[] { 1 }));
+
+            Assert.Equal("The Graylog endpoint could not be resolved.", exception.Message);
+        }
+
+        /// <summary>
         /// The test this replaced sent to a port nothing was listening on and asserted nothing, which
         /// a UDP send can never fail. Binding a listener on loopback keeps it hermetic and lets the
         /// datagram itself be asserted.
@@ -35,52 +91,29 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
         [Fact]
         public async Task Send_DeliversThePayloadToTheResolvedEndpoint()
         {
-            using var listener = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
-            int port = Assert.IsType<IPEndPoint>(listener.Client.LocalEndPoint).Port;
-
-            var dnsInfoProvider = Substitute.For<IDnsInfoProvider>();
-            dnsInfoProvider.GetIpAddress("graylog.example.org").Returns(Task.FromResult<IPAddress?>(IPAddress.Loopback));
+            using UdpLoopbackListener listener = UdpLoopbackListener.Start();
+            using var target = new UdpTransportClient(OptionsFor(listener.Port), Dns());
+            using CancellationTokenSource timeout = Timeout();
 
             byte[] payload = new Fixture().CreateMany<byte>(128).ToArray();
-
-            using var target = new UdpTransportClient(new UdpTransportOptions
-            {
-                Host = "graylog.example.org",
-                Port = port
-            }, dnsInfoProvider);
-
-            // Bounded so a datagram that never arrives fails the test instead of hanging it.
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(10));
-
-            ValueTask<UdpReceiveResult> receiving = listener.ReceiveAsync(timeout.Token);
+            Task<byte[]> receiving = listener.ReceiveAsync(timeout.Token);
 
             await target.Send(payload);
 
-            UdpReceiveResult received = await receiving;
-
-            Assert.Equal(payload, received.Buffer);
+            Assert.Equal(payload, await receiving);
         }
 
         [Fact]
         public async Task Send_ResolvesTheHostnameOnceAndThenReusesTheEndpoint()
         {
-            using var listener = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
-            int port = Assert.IsType<IPEndPoint>(listener.Client.LocalEndPoint).Port;
-
-            var dnsInfoProvider = Substitute.For<IDnsInfoProvider>();
-            dnsInfoProvider.GetIpAddress("graylog.example.org").Returns(Task.FromResult<IPAddress?>(IPAddress.Loopback));
-
-            using var target = new UdpTransportClient(new UdpTransportOptions
-            {
-                Host = "graylog.example.org",
-                Port = port
-            }, dnsInfoProvider);
+            using UdpLoopbackListener listener = UdpLoopbackListener.Start();
+            IDnsInfoProvider dnsInfoProvider = Dns();
+            using var target = new UdpTransportClient(OptionsFor(listener.Port), dnsInfoProvider);
 
             await target.Send(new byte[] { 1 });
             await target.Send(new byte[] { 2 });
 
-            await dnsInfoProvider.Received(1).GetIpAddress("graylog.example.org");
+            await dnsInfoProvider.Received(1).GetIpAddress(Host);
         }
 
         [Fact]
@@ -91,26 +124,16 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
                 return;
             }
 
-            using var listener = new UdpClient(new IPEndPoint(IPAddress.IPv6Loopback, 0));
-            int port = Assert.IsType<IPEndPoint>(listener.Client.LocalEndPoint).Port;
-            var dnsInfoProvider = Substitute.For<IDnsInfoProvider>();
-            dnsInfoProvider.GetIpAddress("graylog.example.org").Returns(Task.FromResult<IPAddress?>(IPAddress.IPv6Loopback));
-            byte[] payload = new byte[] { 1, 2, 3 };
+            using UdpLoopbackListener listener = UdpLoopbackListener.Start(IPAddress.IPv6Loopback);
+            using var target = new UdpTransportClient(OptionsFor(listener.Port), Dns(IPAddress.IPv6Loopback));
+            using CancellationTokenSource timeout = Timeout();
 
-            using var target = new UdpTransportClient(new UdpTransportOptions
-            {
-                Host = "graylog.example.org",
-                Port = port
-            }, dnsInfoProvider);
-
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(10));
-            ValueTask<UdpReceiveResult> receiving = listener.ReceiveAsync(timeout.Token);
+            byte[] payload = { 1, 2, 3 };
+            Task<byte[]> receiving = listener.ReceiveAsync(timeout.Token);
 
             await target.Send(payload);
 
-            UdpReceiveResult received = await receiving;
-            Assert.Equal(payload, received.Buffer);
+            Assert.Equal(payload, await receiving);
         }
 
         /// <summary>
@@ -119,15 +142,13 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
         [Fact]
         public async Task Send_WhenTheHostIsAnIpLiteral_NeverResolves()
         {
-            using var listener = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
-            int port = Assert.IsType<IPEndPoint>(listener.Client.LocalEndPoint).Port;
-
+            using UdpLoopbackListener listener = UdpLoopbackListener.Start();
             var dnsInfoProvider = Substitute.For<IDnsInfoProvider>();
 
             using var target = new UdpTransportClient(new UdpTransportOptions
             {
                 Host = "127.0.0.1",
-                Port = port
+                Port = listener.Port
             }, dnsInfoProvider);
 
             await target.Send(new byte[] { 1 });
@@ -142,48 +163,38 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
         [Fact]
         public async Task Send_WhenTheRefreshIntervalElapses_ResolvesTheHostAgain()
         {
-            using var listener = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
-            int port = Assert.IsType<IPEndPoint>(listener.Client.LocalEndPoint).Port;
-
-            var dnsInfoProvider = Substitute.For<IDnsInfoProvider>();
-            dnsInfoProvider.GetIpAddress("graylog.example.org").Returns(Task.FromResult<IPAddress?>(IPAddress.Loopback));
+            using UdpLoopbackListener listener = UdpLoopbackListener.Start();
+            IDnsInfoProvider dnsInfoProvider = Dns();
 
             long clock = 0;
-            using var target = new UdpTransportClient(new UdpTransportOptions
-            {
-                Host = "graylog.example.org",
-                Port = port,
-                DnsRefreshInterval = TimeSpan.FromSeconds(30)
-            }, dnsInfoProvider, () => clock);
+            using var target = new UdpTransportClient(
+                OptionsFor(listener.Port, o => o.DnsRefreshInterval = TimeSpan.FromSeconds(30)),
+                dnsInfoProvider,
+                () => clock);
 
             await target.Send(new byte[] { 1 });
             await target.Send(new byte[] { 2 });
 
-            await dnsInfoProvider.Received(1).GetIpAddress("graylog.example.org");
+            await dnsInfoProvider.Received(1).GetIpAddress(Host);
 
             clock += 31 * Stopwatch.Frequency;
 
             await target.Send(new byte[] { 3 });
 
-            await dnsInfoProvider.Received(2).GetIpAddress("graylog.example.org");
+            await dnsInfoProvider.Received(2).GetIpAddress(Host);
         }
 
         [Fact]
         public async Task Send_WhenTheRefreshIntervalIsNull_ResolvesOnlyOnce()
         {
-            using var listener = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
-            int port = Assert.IsType<IPEndPoint>(listener.Client.LocalEndPoint).Port;
-
-            var dnsInfoProvider = Substitute.For<IDnsInfoProvider>();
-            dnsInfoProvider.GetIpAddress("graylog.example.org").Returns(Task.FromResult<IPAddress?>(IPAddress.Loopback));
+            using UdpLoopbackListener listener = UdpLoopbackListener.Start();
+            IDnsInfoProvider dnsInfoProvider = Dns();
 
             long clock = 0;
-            using var target = new UdpTransportClient(new UdpTransportOptions
-            {
-                Host = "graylog.example.org",
-                Port = port,
-                DnsRefreshInterval = null
-            }, dnsInfoProvider, () => clock);
+            using var target = new UdpTransportClient(
+                OptionsFor(listener.Port, o => o.DnsRefreshInterval = null),
+                dnsInfoProvider,
+                () => clock);
 
             await target.Send(new byte[] { 1 });
 
@@ -191,7 +202,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
 
             await target.Send(new byte[] { 2 });
 
-            await dnsInfoProvider.Received(1).GetIpAddress("graylog.example.org");
+            await dnsInfoProvider.Received(1).GetIpAddress(Host);
         }
 
         /// <summary>
@@ -200,24 +211,20 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
         [Fact]
         public async Task Send_WhenARefreshFails_KeepsDeliveringToThePreviousEndpoint()
         {
-            using var listener = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
-            int port = Assert.IsType<IPEndPoint>(listener.Client.LocalEndPoint).Port;
+            using UdpLoopbackListener listener = UdpLoopbackListener.Start();
 
             var dnsInfoProvider = Substitute.For<IDnsInfoProvider>();
-            dnsInfoProvider.GetIpAddress("graylog.example.org").Returns(
+            dnsInfoProvider.GetIpAddress(Host).Returns(
                 _ => Task.FromResult<IPAddress?>(IPAddress.Loopback),
                 _ => Task.FromException<IPAddress?>(new SocketException()));
 
             long clock = 0;
-            using var target = new UdpTransportClient(new UdpTransportOptions
-            {
-                Host = "graylog.example.org",
-                Port = port,
-                DnsRefreshInterval = TimeSpan.FromSeconds(30)
-            }, dnsInfoProvider, () => clock);
+            using var target = new UdpTransportClient(
+                OptionsFor(listener.Port, o => o.DnsRefreshInterval = TimeSpan.FromSeconds(30)),
+                dnsInfoProvider,
+                () => clock);
 
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(10));
+            using CancellationTokenSource timeout = Timeout();
 
             await target.Send(new byte[] { 1 });
 
@@ -226,14 +233,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
 
             clock += 31 * Stopwatch.Frequency;
 
-            ValueTask<UdpReceiveResult> receiving = listener.ReceiveAsync(timeout.Token);
+            Task<byte[]> receiving = listener.ReceiveAsync(timeout.Token);
 
             byte[] payload = { 2, 3 };
             await target.Send(payload);
 
-            UdpReceiveResult received = await receiving;
-
-            Assert.Equal(payload, received.Buffer);
+            Assert.Equal(payload, await receiving);
         }
 
         /// <summary>
@@ -248,39 +253,63 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
                 return;
             }
 
-            using var v4Listener = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
-            using var v6Listener = new UdpClient(new IPEndPoint(IPAddress.IPv6Loopback, 0));
+            using UdpLoopbackListener v4Listener = UdpLoopbackListener.Start();
+            using UdpLoopbackListener v6Listener = UdpLoopbackListener.Start(IPAddress.IPv6Loopback);
 
             var dnsInfoProvider = Substitute.For<IDnsInfoProvider>();
-            dnsInfoProvider.GetIpAddress("graylog.example.org").Returns(
+            dnsInfoProvider.GetIpAddress(Host).Returns(
                 _ => Task.FromResult<IPAddress?>(IPAddress.Loopback),
                 _ => Task.FromResult<IPAddress?>(IPAddress.IPv6Loopback));
 
             long clock = 0;
-            var options = new UdpTransportOptions
-            {
-                Host = "graylog.example.org",
-                Port = Assert.IsType<IPEndPoint>(v4Listener.Client.LocalEndPoint).Port,
-                DnsRefreshInterval = TimeSpan.FromSeconds(30)
-            };
+            UdpTransportOptions options = OptionsFor(v4Listener.Port, o => o.DnsRefreshInterval = TimeSpan.FromSeconds(30));
 
             using var target = new UdpTransportClient(options, dnsInfoProvider, () => clock);
 
             await target.Send(new byte[] { 1 });
 
-            options.Port = Assert.IsType<IPEndPoint>(v6Listener.Client.LocalEndPoint).Port;
+            options.Port = v6Listener.Port;
             clock += 31 * Stopwatch.Frequency;
 
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(10));
-            ValueTask<UdpReceiveResult> receiving = v6Listener.ReceiveAsync(timeout.Token);
+            using CancellationTokenSource timeout = Timeout();
+            Task<byte[]> receiving = v6Listener.ReceiveAsync(timeout.Token);
 
             byte[] payload = { 4, 5, 6 };
             await target.Send(payload);
 
-            UdpReceiveResult received = await receiving;
+            Assert.Equal(payload, await receiving);
+        }
 
-            Assert.Equal(payload, received.Buffer);
+        private static UdpTransportOptions OptionsFor(int port, Action<UdpTransportOptions>? configure = null)
+        {
+            var options = new UdpTransportOptions
+            {
+                Host = Host,
+                Port = port
+            };
+
+            configure?.Invoke(options);
+
+            return options;
+        }
+
+        private static IDnsInfoProvider Dns(IPAddress? address = null)
+        {
+            var dnsInfoProvider = Substitute.For<IDnsInfoProvider>();
+            dnsInfoProvider.GetIpAddress(Host).Returns(Task.FromResult<IPAddress?>(address ?? IPAddress.Loopback));
+
+            return dnsInfoProvider;
+        }
+
+        /// <summary>
+        /// Bounded so a datagram that never arrives fails the test instead of hanging it.
+        /// </summary>
+        private static CancellationTokenSource Timeout()
+        {
+            CancellationTokenSource timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(10));
+
+            return timeout;
         }
     }
 }
