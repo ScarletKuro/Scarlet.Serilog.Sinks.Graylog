@@ -29,11 +29,13 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
             payload[^1] = 0x00;
 
             return _tcpClient.Send(payload);
-#else            
-            var payload = System.Text.Encoding.UTF8.GetBytes(message);
-
-            Array.Resize(ref payload, payload.Length + 1);
-            payload[payload.Length - 1] = 0x00;
+#else
+            // Sized once and filled in place. GetBytes followed by Array.Resize allocated the payload
+            // twice and copied all of it, for the sake of one trailing null byte.
+            int byteCount = System.Text.Encoding.UTF8.GetByteCount(message);
+            var payload = new byte[byteCount + 1];
+            System.Text.Encoding.UTF8.GetBytes(message, 0, message.Length, payload, 0);
+            payload[byteCount] = 0x00;
 
             return _tcpClient.Send(payload);
 #endif

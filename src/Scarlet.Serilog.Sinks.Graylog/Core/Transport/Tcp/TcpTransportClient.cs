@@ -29,6 +29,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
         private readonly IDnsInfoProvider _dnsInfoProvider;
         private readonly SemaphoreSlim _sendLock = new(1, 1);
         private TcpClient? _client;
+        private X509Certificate2? _clientCertificate;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TcpTransportClient"/> class.
@@ -94,23 +95,31 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
             string? sslHost = _options.Tls == null ? null : _options.Tls.ServerName ?? hostNameOrAddress;
 
             var client = new TcpClient(address.AddressFamily);
+            Stream? stream = null;
             try
             {
                 client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, _options.EnableKeepAlive);
                 await ConnectWithTimeout(client, address, port).ConfigureAwait(false);
-                Stream stream = client.GetStream();
+                stream = client.GetStream();
 
                 if (!string.IsNullOrWhiteSpace(sslHost))
                 {
                     var sslStream = new SslStream(stream, false);
+
+                    // Adopted before the handshake, so a failure below disposes it too.
+                    stream = sslStream;
+
                     var certificates = new X509CertificateCollection();
                     if (!string.IsNullOrWhiteSpace(_options.Tls?.ClientCertificatePath))
                     {
-                        certificates.Add(TlsCertificateLoader.LoadClientCertificate(_options.Tls!));
+                        // Loaded once and reused for the life of the client. Connect runs again on
+                        // every reconnect, and loading here pulled the PFX off disk each time and took
+                        // an unmanaged key handle that nothing released.
+                        _clientCertificate ??= TlsCertificateLoader.LoadClientCertificate(_options.Tls!);
+                        certificates.Add(_clientCertificate);
                     }
 
                     await sslStream.AuthenticateAsClientAsync(sslHost, certificates, SslProtocols.None, true).ConfigureAwait(false);
-                    stream = sslStream;
 
                     if (sslStream.RemoteCertificate != null)
                     {
@@ -130,6 +139,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
             }
             catch
             {
+                stream?.Dispose();
                 client.Dispose();
                 throw;
             }
@@ -201,6 +211,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
             if (disposing)
             {
                 CloseConnection();
+                _clientCertificate?.Dispose();
+                _clientCertificate = null;
             }
         }
     }
