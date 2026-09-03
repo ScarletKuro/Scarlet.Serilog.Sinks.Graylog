@@ -169,16 +169,26 @@ rotated Kubernetes Service or a DNS failover is picked up. A refresh that fails 
 the last address that worked. A `Host` that is already an IP literal is never resolved at all, on any
 transport.
 
-## GELF field names
+## GELF field names and values
 
 Serilog property names become GELF additional fields. GELF requires each one to carry a leading `_`
 and to match `^[\w.\-]*$`, so the sink prefixes every field and replaces any other character with an
 underscore — relevant mainly to dictionary keys, which can be arbitrary strings. This is not
 cosmetic: Graylog validates the name and **drops a field whose name contains anything else**, so an
-unsanitized key such as `k8s:pod` loses its value entirely. `_id` is reserved, so a property called
-`id` is written as `_id_`. Two names that end up identical after sanitizing are written last-wins.
+unsanitized key such as `k8s:pod` would lose its value entirely.
 
 Graylog strips the leading underscore again on the way in, so `_UserId` is searchable as `UserId`.
+That means a property whose name collides with a field Graylog sets itself is silently discarded, so
+the sink appends an underscore to those: `message`, `source`, `timestamp`, `level`, `host`,
+`full_message`, anything starting with `gl2_`, and `id` (which the GELF spec reserves outright).
+A property called `message` therefore arrives as `message_`. Graylog compares those names
+case-sensitively, so the PascalCase spellings Serilog properties usually carry — `Message`, `Source`,
+`Timestamp` — are left exactly as they are. Two names that end up identical after all this are
+written last-wins.
+
+**Booleans are written as the strings `"true"` and `"false"`.** Graylog drops boolean additional
+fields, so a `bool` property would otherwise vanish from the message. As text it survives and stays
+searchable as `MyFlag:true`. Numbers are unaffected and stay numeric.
 
 ## Batching
 

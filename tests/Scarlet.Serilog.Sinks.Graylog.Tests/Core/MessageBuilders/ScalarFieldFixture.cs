@@ -32,8 +32,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
         {
             yield return new object[] { "abc", "\"abc\"" };
             yield return new object[] { "a\"b\\c\u00E9", "\"a\\u0022b\\\\c\\u00E9\"" };
-            yield return new object[] { false, "false" };
-            yield return new object[] { true, "true" };
+            // The one deliberate deviation from the pre-AOT wire format: Graylog drops boolean
+            // additional fields, so the builder writes them as text. See GelfFieldNameFixture.
+            yield return new object[] { false, "\"false\"" };
+            yield return new object[] { true, "\"true\"" };
             yield return new object[] { (byte)7, "7" };
             yield return new object[] { (sbyte)-7, "-7" };
             yield return new object[] { (short)-300, "-300" };

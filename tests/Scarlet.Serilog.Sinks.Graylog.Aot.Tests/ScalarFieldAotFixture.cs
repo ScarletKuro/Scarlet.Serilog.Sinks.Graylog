@@ -26,7 +26,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Aot.Tests
             {
                 ["string"] = ("abc", "\"abc\""),
                 ["string escaped"] = ("a\"b\\cé", "\"a\\u0022b\\\\c\\u00E9\""),
-                ["bool"] = (true, "true"),
+                // Written as text because Graylog drops boolean additional fields; see GelfFieldNameFixture.
+                ["bool"] = (true, "\"true\""),
                 ["byte"] = ((byte)7, "7"),
                 ["sbyte"] = ((sbyte)-7, "-7"),
                 ["short"] = ((short)-300, "-300"),

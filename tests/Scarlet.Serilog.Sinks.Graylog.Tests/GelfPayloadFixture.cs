@@ -115,7 +115,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             JsonObject payload = SinglePayload(transport);
 
             Assert.Equal(1, payload.Value<int>("_test.Id"));
-            Assert.True(payload.Value<bool>("_test.Flag"));
+            // Booleans go out as text, because Graylog drops boolean additional fields.
+            Assert.Equal("true", payload.Text("_test.Flag"));
             Assert.Equal("whirlwind", payload.Text("_test.Bar.Prop"));
 
             // A structure contributes its leaves only; there is no field for the structure itself.

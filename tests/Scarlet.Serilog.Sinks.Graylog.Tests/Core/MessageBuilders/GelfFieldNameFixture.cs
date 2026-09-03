@@ -1,6 +1,7 @@
 using Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders;
 using Serilog.Events;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Xunit;
 
@@ -46,7 +47,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
         }
 
         /// <summary>
-        /// GELF reserves <c>_id</c>, so a property called <c>id</c> has to move out of the way.
+        /// The GELF spec tells libraries not to emit <c>_id</c>, so a property called <c>id</c> has to
+        /// move out of the way - in any casing, since a consumer stricter than Graylog may fold it.
+        /// The original casing is kept, so <c>Id</c> becomes <c>_Id_</c> rather than <c>_id_</c>.
         /// </summary>
         [Theory]
         [InlineData("id")]
@@ -56,8 +59,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
         {
             JsonObject actual = Build(propertyName, new ScalarValue(42));
 
-            Assert.Equal(42, actual["_id_"]!.GetValue<int>());
-            Assert.False(actual.ContainsKey("_id"));
+            Assert.Equal(42, actual[$"_{propertyName}_"]!.GetValue<int>());
+            Assert.False(actual.ContainsKey($"_{propertyName}"));
         }
 
         /// <summary>
@@ -126,6 +129,60 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
             JsonObject actual = messageBuilder.Build(LogEventSource.GetScalarEvent("Val", 1));
 
             Assert.True(actual.ContainsKey("_my_template"));
+        }
+
+        /// <summary>
+        /// Graylog sets these fields itself and silently discards an incoming field of the same
+        /// name, so they have to move out of the way.
+        /// </summary>
+        /// <remarks>
+        /// Verified against Graylog 6.1: a GELF message carrying <c>_message</c>, <c>_source</c>,
+        /// <c>_timestamp</c>, <c>_level</c>, <c>_host</c> or a <c>_gl2_</c>-prefixed field arrives
+        /// with those fields missing entirely.
+        /// </remarks>
+        [Theory]
+        [InlineData("message")]
+        [InlineData("source")]
+        [InlineData("timestamp")]
+        [InlineData("level")]
+        [InlineData("host")]
+        [InlineData("full_message")]
+        [InlineData("gl2_custom")]
+        public void Build_ReservedPropertyName_IsEscaped(string propertyName)
+        {
+            JsonObject actual = Build(propertyName, new ScalarValue("value"));
+
+            Assert.True(actual.ContainsKey($"_{propertyName}_"));
+            Assert.False(actual.ContainsKey($"_{propertyName}"));
+        }
+
+        /// <summary>
+        /// Graylog compares those names case-sensitively, so the PascalCase spelling Serilog
+        /// properties usually carry is kept as-is rather than churned.
+        /// </summary>
+        [Theory]
+        [InlineData("Message")]
+        [InlineData("Source")]
+        [InlineData("Timestamp")]
+        public void Build_ReservedNameInAnotherCasing_IsLeftAlone(string propertyName)
+        {
+            JsonObject actual = Build(propertyName, new ScalarValue("value"));
+
+            Assert.True(actual.ContainsKey($"_{propertyName}"));
+        }
+
+        /// <summary>
+        /// Graylog drops boolean additional fields outright, so they go out as text.
+        /// </summary>
+        [Theory]
+        [InlineData(true, "true")]
+        [InlineData(false, "false")]
+        public void Build_BooleanScalar_IsWrittenAsText(bool given, string expected)
+        {
+            JsonObject actual = Build("Flag", new ScalarValue(given));
+
+            Assert.Equal(JsonValueKind.String, actual["_Flag"]!.GetValueKind());
+            Assert.Equal(expected, actual["_Flag"]!.GetValue<string>());
         }
 
         private static JsonObject Build(string propertyName, LogEventPropertyValue value, bool parseArrayValues = false)

@@ -137,15 +137,39 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
         /// </remarks>
         protected static void AddGelfField(JsonObject target, string name, JsonNode? value)
         {
-            target[ToGelfFieldName(name)] = value;
+            target[ToGelfFieldName(name)] = CoerceForGraylog(value);
+        }
+
+        /// <summary>
+        /// Graylog drops boolean additional fields, so they are written as their text form instead.
+        /// </summary>
+        /// <remarks>
+        /// Verified against Graylog 6.1: a field sent as a JSON <c>true</c> or <c>false</c> never appears
+        /// on the stored message, while the strings <c>"true"</c> and <c>"false"</c> do, and stay
+        /// searchable as <c>MyFlag:true</c>. Losing the field entirely is the worse of the two.
+        /// </remarks>
+        private static JsonNode? CoerceForGraylog(JsonNode? value)
+        {
+            if (value == null)
+            {
+                return null;
+            }
+
+            // Kind rather than a type test: a bool reaches here either as a CLR value or wrapped in a
+            // JsonElement, depending on whether a contract served it.
+            return value.GetValueKind() switch
+            {
+                JsonValueKind.True => "true",
+                JsonValueKind.False => "false",
+                _ => value
+            };
         }
 
         private static string ToGelfFieldName(string name)
         {
-            // GELF reserves _id, so a property called 'id' has to move out of the way.
-            if (name.Equals("id", StringComparison.OrdinalIgnoreCase))
+            if (IsReserved(name))
             {
-                name = "id_";
+                name += "_";
             }
 
             string sanitized = SanitizeFieldName(name);
@@ -153,6 +177,38 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
             return sanitized.StartsWith("_", StringComparison.Ordinal)
                 ? sanitized
                 : $"_{sanitized}";
+        }
+
+        /// <summary>
+        /// Reports whether Graylog would swallow a field of this name once it strips the underscore.
+        /// </summary>
+        /// <remarks>
+        /// Graylog matches these case-sensitively - verified against 6.1, where <c>_message</c> is
+        /// discarded but <c>_Message</c> is kept - so only the exact spellings are escaped, and the
+        /// PascalCase names Serilog properties usually carry are left alone. <c>id</c> is the exception:
+        /// the GELF spec tells libraries not to emit <c>_id</c> at all, so it is escaped whatever its
+        /// casing, for the benefit of consumers stricter than Graylog.
+        /// </remarks>
+        private static bool IsReserved(string name)
+        {
+            if (name.Equals("id", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            // Graylog sets these itself and skips the incoming field, or reserves the prefix outright.
+            switch (name)
+            {
+                case "message":
+                case "source":
+                case "timestamp":
+                case "level":
+                case "host":
+                case "full_message":
+                    return true;
+                default:
+                    return name.StartsWith("gl2_", StringComparison.Ordinal);
+            }
         }
 
         /// <summary>
