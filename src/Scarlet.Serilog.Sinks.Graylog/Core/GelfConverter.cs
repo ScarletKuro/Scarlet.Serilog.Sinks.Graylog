@@ -9,7 +9,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core
     /// <summary>
     /// The default <see cref="IGelfConverter"/>, which dispatches to a message builder per event kind.
     /// </summary>
-    public class GelfConverter : IGelfConverter
+    public sealed class GelfConverter : IGelfConverter
     {
         private readonly IDictionary<BuilderType, Lazy<IMessageBuilder>> _messageBuilders;
 

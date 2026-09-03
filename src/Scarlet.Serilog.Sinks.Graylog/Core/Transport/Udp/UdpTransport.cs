@@ -44,17 +44,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
         }
 
         /// <inheritdoc />
+        /// <remarks>The transport owns its client, so the socket is released with it.</remarks>
         public void Dispose()
         {
-            Dispose(true);
-        }
-
-        private void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                _transportClient.Dispose();
-            }
+            _transportClient?.Dispose();
         }
     }
 }

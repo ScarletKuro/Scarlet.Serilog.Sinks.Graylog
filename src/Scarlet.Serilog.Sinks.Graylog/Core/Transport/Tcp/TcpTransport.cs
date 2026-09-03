@@ -6,7 +6,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
     /// <summary>
     /// Sends GELF messages over TCP as null-terminated UTF-8 frames.
     /// </summary>
-    public class TcpTransport : ITransport
+    public sealed class TcpTransport : ITransport
     {
         private readonly ITransportClient<byte[]> _tcpClient;
 
@@ -42,22 +42,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
         }
 
         /// <inheritdoc />
+        /// <remarks>The transport owns its client, so the connection is closed with it.</remarks>
         public void Dispose()
         {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        /// <summary>
-        /// Releases the resources used by this transport.
-        /// </summary>
-        /// <param name="disposing"><c>true</c> when called from <see cref="Dispose()"/>; the transport client is disposed with it.</param>
-        protected virtual void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                _tcpClient?.Dispose();
-            }
+            _tcpClient?.Dispose();
         }
     }
 }

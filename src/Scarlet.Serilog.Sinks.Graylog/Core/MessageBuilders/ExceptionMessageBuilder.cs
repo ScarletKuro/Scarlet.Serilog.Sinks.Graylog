@@ -9,7 +9,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
     /// Exception builder
     /// </summary>
     /// <seealso cref="GelfMessageBuilder" />
-    public class ExceptionMessageBuilder : GelfMessageBuilder
+    public sealed class ExceptionMessageBuilder : GelfMessageBuilder
     {
         private const string DefaultExceptionDelimiter = " - ";
         private const string DefaultStackTraceDelimiter = "--- Inner exception stack trace ---";

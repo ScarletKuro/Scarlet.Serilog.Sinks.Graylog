@@ -1,4 +1,3 @@
-using System;
 using System.Threading.Tasks;
 
 namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
@@ -6,7 +5,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
     /// <summary>
     /// Sends GELF messages over HTTP.
     /// </summary>
-    public class HttpTransport : ITransport
+    public sealed class HttpTransport : ITransport
     {
         private readonly ITransportClient<string> _transportClient;
 
@@ -26,22 +25,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
         }
 
         /// <inheritdoc />
+        /// <remarks>The transport owns its client, so the client is disposed with it.</remarks>
         public void Dispose()
         {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-
-        /// <summary>
-        /// Releases the resources used by this transport.
-        /// </summary>
-        /// <param name="disposing"><c>true</c> when called from <see cref="Dispose()"/>; the transport client is disposed with it.</param>
-        protected virtual void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                _transportClient?.Dispose();
-            }
+            _transportClient?.Dispose();
         }
     }
 }
