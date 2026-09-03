@@ -59,6 +59,8 @@ internal static class GraylogSinkOptionsValidator
                 if (options.Http.Tls?.ServerName != null)
                     throw new ArgumentException("The HTTP transport takes the TLS server name from the endpoint; set it on the endpoint host instead.", nameof(options.Http.Tls));
                 ValidateTls(options.Http.Tls, "HTTP");
+                ValidateTimeout(options.Http.Timeout, nameof(options.Http.Timeout));
+                ValidateTimeout(options.Http.ConnectionLifetime, nameof(options.Http.ConnectionLifetime));
                 break;
 
             case TransportType.Custom:

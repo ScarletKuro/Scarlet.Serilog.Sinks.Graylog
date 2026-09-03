@@ -92,6 +92,49 @@ jobs:
             artifacts/*.nupkg
             artifacts/*.snupkg
 
+  integration:
+    name: Graylog integration
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The test project targets net8.0 and net10.0; one framework is enough to prove Graylog accepts
+      # what the sink sends, and these tests are slow enough not to want twice.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # Not a service container: Graylog needs MongoDB and OpenSearch up and healthy before it will
+      # start, and only compose can express that ordering. --wait blocks on the healthchecks, so the
+      # tests never race the server coming up.
+      - name: Start Graylog
+        run: docker compose -f tests/integration/docker-compose.yml up -d --wait
+
+      # The build job covers everything else, so a failure here is about Graylog and nothing else. The
+      # fixture creates the GELF inputs itself; the step above is what guarantees there is a server for
+      # it to create them on. Both guards are against a run that passes without testing anything:
+      # GRAYLOG_REQUIRED turns the fixture's local-developer skip into a failure, and
+      # --minimum-expected-tests catches a renamed trait leaving the filter matching nothing.
+      - name: Test
+        env:
+          GRAYLOG_REQUIRED: 'true'
+        run: >
+          dotnet test tests/Scarlet.Serilog.Sinks.Graylog.Tests/Scarlet.Serilog.Sinks.Graylog.Tests.csproj
+          -c Release -f net10.0 --
+          --filter-trait "Category=Integration"
+          --minimum-expected-tests 7
+
+      - name: Graylog logs
+        if: failure()
+        run: docker compose -f tests/integration/docker-compose.yml logs --tail 200 graylog
+
+      - name: Stop Graylog
+        if: always()
+        run: docker compose -f tests/integration/docker-compose.yml down -v
+
   aot:
     name: Native AOT
     runs-on: ubuntu-latest

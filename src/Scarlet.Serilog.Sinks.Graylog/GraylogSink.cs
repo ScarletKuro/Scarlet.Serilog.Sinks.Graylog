@@ -47,7 +47,13 @@ namespace Scarlet.Serilog.Sinks.Graylog
         /// </summary>
         private readonly ConcurrentDictionary<Task, byte> _inFlight = new ConcurrentDictionary<Task, byte>();
 
-        private bool _disposed;
+        /// <summary>
+        /// Non-zero once disposal has started. An <see cref="int"/> driven through
+        /// <see cref="Interlocked"/> rather than a <see cref="bool"/>: a plain field let two threads
+        /// both read <c>false</c> and dispose the transport twice, and left <see cref="Emit"/> free to
+        /// read a stale <c>false</c> indefinitely.
+        /// </summary>
+        private int _disposed;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="GraylogSink"/> class.
@@ -91,6 +97,18 @@ namespace Scarlet.Serilog.Sinks.Graylog
         /// </remarks>
         public void Emit(LogEvent logEvent)
         {
+            // Reported rather than thrown: an event arriving after Log.CloseAndFlush() is a shutdown
+            // ordering problem in the application, and taking it down over a log line would be worse
+            // than losing the line. The check narrows the window rather than closing it - a send that
+            // starts just before disposal and finds the transport gone underneath it faults, and its
+            // continuation reports that to SelfLog the same way.
+            if (Volatile.Read(ref _disposed) != 0)
+            {
+                SelfLog.WriteLine("A log event reached the Graylog sink after it was disposed and was dropped.");
+
+                return;
+            }
+
             Task send = SendAsync(logEvent);
 
             if (send.IsCompleted)
@@ -179,12 +197,10 @@ namespace Scarlet.Serilog.Sinks.Graylog
         /// </remarks>
         public void Dispose()
         {
-            if (_disposed)
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
             {
                 return;
             }
-
-            _disposed = true;
 
             Task[] pending = TakePending();
 
@@ -214,12 +230,10 @@ namespace Scarlet.Serilog.Sinks.Graylog
         /// </remarks>
         public async ValueTask DisposeAsync()
         {
-            if (_disposed)
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
             {
                 return;
             }
-
-            _disposed = true;
 
             Task[] pending = TakePending();
 

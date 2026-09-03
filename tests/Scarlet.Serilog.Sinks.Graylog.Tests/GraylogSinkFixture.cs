@@ -3,6 +3,7 @@ using Serilog;
 using Serilog.Debugging;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
@@ -329,6 +330,82 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             }
 
             Assert.Equal(1, transport.DisposeCount);
+        }
+
+        /// <summary>
+        /// Two threads disposing at once must not both get past the guard: the second one tore the
+        /// transport down a second time, underneath whatever the first was still waiting for.
+        /// </summary>
+        [Fact]
+        public void Dispose_CalledConcurrently_ReleasesTheTransportOnce()
+        {
+            using var transport = new RecordingTransport();
+            var sink = new GraylogSink(transport.SinkOptions());
+
+            sink.Emit(LogEventSource.GetSimpleLogEvent(DateTimeOffset.UnixEpoch));
+
+            using var start = new ManualResetEventSlim();
+            var threads = new Thread[8];
+
+            for (int i = 0; i < threads.Length; i++)
+            {
+                threads[i] = new Thread(() =>
+                {
+                    start.Wait();
+                    sink.Dispose();
+                });
+                threads[i].Start();
+            }
+
+            start.Set();
+
+            foreach (Thread thread in threads)
+            {
+                thread.Join();
+            }
+
+            Assert.Equal(1, transport.DisposeCount);
+        }
+
+        [Fact]
+        public async Task DisposeAsync_AfterDispose_DoesNotReleaseTheTransportAgain()
+        {
+            using var transport = new RecordingTransport();
+            var sink = new GraylogSink(transport.SinkOptions());
+
+            sink.Dispose();
+            await sink.DisposeAsync();
+
+            // Never materialised, so nothing to release - what matters is that neither call ran twice.
+            Assert.Equal(0, transport.DisposeCount);
+        }
+
+        /// <summary>
+        /// An event arriving after the sink was disposed is a shutdown ordering problem in the
+        /// application. Reporting it beats both alternatives: sending it through a transport that has
+        /// already been torn down, and taking the process down over a log line.
+        /// </summary>
+        [Fact]
+        public void Emit_AfterDispose_ReportsTheDroppedEventInsteadOfSending()
+        {
+            using var transport = new RecordingTransport();
+            var sink = new GraylogSink(transport.SinkOptions());
+
+            sink.Dispose();
+
+            var reported = new List<string>();
+            SelfLog.Enable(reported.Add);
+
+            try
+            {
+                sink.Emit(LogEventSource.GetSimpleLogEvent(DateTimeOffset.UnixEpoch));
+            } finally
+            {
+                SelfLog.Disable();
+            }
+
+            Assert.Empty(transport.Payloads);
+            Assert.Contains(reported, message => message.Contains("after it was disposed"));
         }
 
         /// <summary>

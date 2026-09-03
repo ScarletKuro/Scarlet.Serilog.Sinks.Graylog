@@ -58,9 +58,16 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
                 ["short_message"] = shortMessage,
                 ["timestamp"] = logEvent.Timestamp.ConvertToNix(),
                 ["level"] = LogLevelMapper.GetMappedLevel(logEvent.Level),
-                ["_stringLevel"] = logEvent.Level.ToString(),
-                ["_facility"] = Options.Facility
+                ["_stringLevel"] = logEvent.Level.ToString()
             };
+
+            // Omitted rather than sent as a JSON null when no facility is configured: an explicit null
+            // still creates the field on the stored message, so every event carried an empty _facility
+            // that nobody set and nothing can search on.
+            if (Options.Facility != null)
+            {
+                jsonObject["_facility"] = Options.Facility;
+            }
 
             if (message.Length > Options.ShortMessageMaxLength)
             {

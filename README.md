@@ -180,6 +180,23 @@ new GraylogSinkOptions
 
 `Content-Type` cannot be overridden; the transport always sends JSON as `application/json`.
 
+### HTTP timeouts and connection reuse
+
+| Option | Default | What it does |
+| --- | --- | --- |
+| `Http.Timeout` | 30 seconds | How long one request may take. `null` leaves `HttpClient`'s own 100-second default, which is long enough to hold up shutdown and, under batching, to stall everything queued behind it. |
+| `Http.ConnectionLifetime` | 2 minutes | How long a pooled connection is reused before it is replaced. `null` keeps connections for the life of the process. |
+
+`ConnectionLifetime` is what makes a long-running application notice that Graylog has moved. The
+connection pool resolves the host when it opens a connection and not again, so without it a process
+that has been up for weeks still posts to whatever address it resolved at startup. It is the HTTP
+equivalent of `Udp.DnsRefreshInterval` and of the TCP transport's re-resolve on reconnect.
+
+It is applied through `SocketsHttpHandler.PooledConnectionLifetime` on .NET, and through the
+endpoint's `ServicePoint.ConnectionLeaseTimeout` on .NET Framework. The one gap is net462 *with a
+client certificate*, which uses `WinHttpHandler`: it pools outside `ServicePointManager` and ignores
+the setting.
+
 All grouped options are defined in
 [`GraylogSinkOptions.cs`](https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/blob/master/src/Scarlet.Serilog.Sinks.Graylog/GraylogSinkOptions.cs)
 (including `Message`, `Delivery`, and each transport section).
@@ -200,6 +217,9 @@ Because UDP has no connection to fail, a resolved host is re-resolved every
 rotated Kubernetes Service or a DNS failover is picked up. A refresh that fails keeps delivering to
 the last address that worked. A `Host` that is already an IP literal is never resolved at all, on any
 transport.
+
+TCP re-resolves on every reconnect, and HTTP on `Http.ConnectionLifetime` — see
+[HTTP timeouts and connection reuse](#http-timeouts-and-connection-reuse).
 
 ## GELF field names and values
 
@@ -361,6 +381,30 @@ Two defaults worth knowing:
 
 - Configure the sink **in code**. `ReadFrom.Configuration` (`Serilog.Settings.Configuration`) binds
   sink arguments reflectively and is not AOT-friendly. It is not a dependency of this package.
+
+## Running the tests
+
+```powershell
+dotnet test scarlet-serilog-sinks-graylog.slnx -- --filter-not-trait "Category=Integration"
+```
+
+That is the default run and needs nothing installed: every transport is exercised against loopback
+servers in-process.
+
+The tests tagged `Category=Integration` send GELF to a **real Graylog** over UDP, TCP and HTTP and
+read the stored message back out of its search API — the only way to check the things a loopback
+server cannot answer, such as whether Graylog accepts a field name, reassembles a chunked datagram,
+or finishes reading a null-terminated TCP frame. They need a server:
+
+```powershell
+docker compose -f tests/integration/docker-compose.yml up -d --wait
+dotnet test scarlet-serilog-sinks-graylog.slnx -f net10.0 -- --filter-trait "Category=Integration"
+docker compose -f tests/integration/docker-compose.yml down -v
+```
+
+The test fixture creates the three GELF inputs itself, so the server needs no setup. Without one the
+tests skip rather than fail. Point `GRAYLOG_API_URI`, `GRAYLOG_USERNAME` and `GRAYLOG_PASSWORD` at
+another instance to use that instead of the compose file's.
 
 ## Credits
 

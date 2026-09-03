@@ -50,6 +50,26 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             Assert.False(payload.ContainsKey("full_message"));
         }
 
+        /// <summary>
+        /// No facility configured means no facility field, not a field explicitly set to null: Graylog
+        /// stores the null, so every event carried an empty _facility that nobody set and nothing can
+        /// usefully search on.
+        /// </summary>
+        [Fact]
+        public void Payload_WithoutAConfiguredFacility_OmitsTheField()
+        {
+            var transport = new RecordingTransport();
+
+            using (Logger logger = LoggerFor(transport))
+            {
+                logger.Error("boom");
+            }
+
+            JsonObject payload = SinglePayload(transport);
+
+            Assert.False(payload.ContainsKey("_facility"));
+        }
+
         [Fact]
         public void Timestamp_IsWrittenAsUnixSeconds()
         {

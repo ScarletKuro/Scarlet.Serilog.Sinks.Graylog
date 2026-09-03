@@ -550,6 +550,36 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             Assert.Equal("Factory", Throws<ArgumentException>(options).ParamName);
         }
 
+        [Theory]
+        [MemberData(nameof(NonPositiveTimeouts))]
+        public void Validate_Http_WithANonPositiveTimeout_Throws(TimeSpan timeout)
+        {
+            GraylogSinkOptions options = HttpOptions(o => o.Timeout = timeout);
+
+            Assert.Equal("Timeout", Throws<ArgumentOutOfRangeException>(options).ParamName);
+        }
+
+        [Theory]
+        [MemberData(nameof(NonPositiveTimeouts))]
+        public void Validate_Http_WithANonPositiveConnectionLifetime_Throws(TimeSpan connectionLifetime)
+        {
+            GraylogSinkOptions options = HttpOptions(o => o.ConnectionLifetime = connectionLifetime);
+
+            Assert.Equal("ConnectionLifetime", Throws<ArgumentOutOfRangeException>(options).ParamName);
+        }
+
+        [Fact]
+        public void Validate_Http_WithoutATimeoutOrConnectionLifetime_Accepts()
+        {
+            GraylogSinkOptions options = HttpOptions(o =>
+            {
+                o.Timeout = null;
+                o.ConnectionLifetime = null;
+            });
+
+            GraylogSinkOptionsValidator.Validate(options);
+        }
+
         [Fact]
         public void Validate_Custom_WithAFactory_Accepts()
         {

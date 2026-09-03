@@ -19,6 +19,9 @@
 
         <RepositoryUrl>https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog</RepositoryUrl>
         <PackageIcon>serilog-sink-nuget.png</PackageIcon>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+
+        <Deterministic>true</Deterministic>
 
         <PackageTags>Serilog Sink Graylog Batching Scarlet</PackageTags>
         <Copyright>Copyright © 2016 Anton Volkov and Contributors, © 2026 ScarletKuro and Contributors</Copyright>
@@ -33,6 +36,18 @@
 
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
     </PropertyGroup>
+	
+  <PropertyGroup>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+  
+  <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+  </PropertyGroup> 
+	
     <ItemGroup>
         <InternalsVisibleTo Include="Scarlet.Serilog.Sinks.Graylog.Tests, PublicKey=$(AssemblySignPublicKey)" />
 
@@ -60,7 +75,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <None Include="..\..\README.md">
+        <None Include="..\..\README.md" Pack="true" PackagePath="">
             <Link>README.md</Link>
         </None>
     </ItemGroup>

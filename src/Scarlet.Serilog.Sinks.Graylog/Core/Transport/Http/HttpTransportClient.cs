@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
@@ -42,38 +43,98 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
             _httpClient = new Lazy<HttpClient>(CreateConfiguredHttpClient);
         }
 
-
         /// <summary>
         /// Creates the <see cref="HttpClient"/> used for every request.
         /// </summary>
+        /// <returns>A client over the handler from <see cref="CreateHttpMessageHandler"/>, which it owns.</returns>
+        /// <remarks>
+        /// The handler is built explicitly rather than left to <c>new HttpClient()</c>, because on .NET
+        /// <c>SocketsHttpHandler.PooledConnectionLifetime</c> is the only way to make a long-lived
+        /// client notice that Graylog's address has changed: the connection pool otherwise keeps a
+        /// connection for the life of the process and never resolves the host again. The UDP and TCP
+        /// transports re-resolve on their own schedule; without this, HTTP alone would keep posting to
+        /// an address that had moved.
+        /// </remarks>
+        protected virtual HttpClient CreateHttpClient()
+        {
+            return new HttpClient(CreateHttpMessageHandler(), disposeHandler: true);
+        }
+
+        /// <summary>
+        /// Creates the handler underneath the <see cref="HttpClient"/>.
+        /// </summary>
         /// <returns>
-        /// A plain client, or one over a handler carrying the client certificate when
+        /// A handler that retires pooled connections after
+        /// <see cref="HttpTransportOptions.ConnectionLifetime"/>, carrying the client certificate when
         /// <see cref="TlsOptions.ClientCertificate"/> or <see cref="TlsOptions.ClientCertificatePath"/>
         /// is set.
         /// </returns>
-        protected virtual HttpClient CreateHttpClient()
+        /// <remarks>
+        /// Override this to keep the sink's client configuration and supply a different pipeline - a
+        /// proxy handler, or one that retries. <see cref="CreateHttpClient"/> disposes whatever this
+        /// returns along with the client.
+        /// </remarks>
+        protected virtual HttpMessageHandler CreateHttpMessageHandler()
         {
-            if (!TlsCertificateLoader.HasClientCertificate(_options.Tls))
+            bool hasClientCertificate = TlsCertificateLoader.HasClientCertificate(_options.Tls);
+
+#if NET
+            var handler = new SocketsHttpHandler
             {
-                return new HttpClient();
+                PooledConnectionLifetime = _options.ConnectionLifetime ?? Timeout.InfiniteTimeSpan
+            };
+
+            if (hasClientCertificate)
+            {
+                handler.SslOptions.ClientCertificates = new X509CertificateCollection { ResolveClientCertificate() };
             }
 
- #if NET462
-            var handler = new WinHttpHandler();
-            handler.ClientCertificateOption = ClientCertificateOption.Manual;
- #else
+            return handler;
+#elif NET462
+            // WinHttpHandler is the one handler on net462 that can present a client certificate the
+            // application chose rather than one the platform picked; it also pools outside
+            // ServicePointManager, so ConnectionLifetime cannot reach it. Everything else stays on the
+            // default handler, where ConfigureHttpClient applies the lifetime through the service point.
+            if (hasClientCertificate)
+            {
+                var winHttpHandler = new WinHttpHandler { ClientCertificateOption = ClientCertificateOption.Manual };
+
+                winHttpHandler.ClientCertificates.Add(ResolveClientCertificate());
+
+                return winHttpHandler;
+            }
+
+            return new HttpClientHandler();
+#else
             var handler = new HttpClientHandler();
- #endif
-            // The handler holds the certificate for the life of the client but never disposes the
-            // collection's contents, so anything loaded here is this client's to release.
+
+            if (hasClientCertificate)
+            {
+                handler.ClientCertificates.Add(ResolveClientCertificate());
+            }
+
+            return handler;
+#endif
+        }
+
+        /// <summary>
+        /// Loads the configured client certificate, recording it for disposal when this client is the
+        /// one that loaded it.
+        /// </summary>
+        /// <remarks>
+        /// A handler holds the certificate for the life of the client but never disposes the
+        /// collection's contents, so anything loaded here is this client's to release.
+        /// </remarks>
+        private X509Certificate2 ResolveClientCertificate()
+        {
             (X509Certificate2 certificate, bool owned) = TlsCertificateLoader.ResolveClientCertificate(_options.Tls!);
+
             if (owned)
             {
                 _ownedClientCertificate = certificate;
             }
 
-            handler.ClientCertificates.Add(certificate);
-            return new HttpClient(handler, true);
+            return certificate;
         }
 
         /// <summary>
@@ -102,6 +163,13 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
 
             httpClient.BaseAddress = builder.Uri;
 
+            if (_options.Timeout is { } timeout)
+            {
+                httpClient.Timeout = timeout;
+            }
+
+            ApplyConnectionLifetime(builder.Uri);
+
             httpClient.DefaultRequestHeaders.ExpectContinue = false;
             httpClient.DefaultRequestHeaders.CacheControl = new CacheControlHeaderValue { NoCache = true };
 
@@ -113,6 +181,32 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
             }
 
             ConfigureCustomHeaders(httpClient);
+        }
+
+        /// <summary>
+        /// Retires pooled connections to the endpoint after
+        /// <see cref="HttpTransportOptions.ConnectionLifetime"/>, on the frameworks where the handler
+        /// itself offers no such setting.
+        /// </summary>
+        /// <remarks>
+        /// <c>ConnectionLeaseTimeout</c> is the .NET Framework equivalent of
+        /// <c>SocketsHttpHandler.PooledConnectionLifetime</c>: closing the connection once the
+        /// lease expires is what forces the next request to resolve the host again. Only the service
+        /// point for this endpoint is touched, never the process-wide defaults.
+        /// </remarks>
+        private void ApplyConnectionLifetime(Uri endpoint)
+        {
+#if !NET
+            if (_options.ConnectionLifetime is not { } lifetime)
+            {
+                return;
+            }
+
+            double milliseconds = lifetime.TotalMilliseconds;
+
+            ServicePointManager.FindServicePoint(endpoint).ConnectionLeaseTimeout =
+                milliseconds >= int.MaxValue ? int.MaxValue : (int)milliseconds;
+#endif
         }
 
         private void ConfigureCustomHeaders(HttpClient httpClient)
@@ -155,9 +249,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
         {
             HttpClient httpClient = _httpClient.Value;
 
-            var content = new StringContent(message, Encoding.UTF8, "application/json");
+            using var content = new StringContent(message, Encoding.UTF8, "application/json");
 
-            HttpResponseMessage result = await httpClient.PostAsync(DefaultHttpUriPath, content).ConfigureAwait(false);
+            // The response is buffered by the time PostAsync returns, so the connection is already back
+            // in the pool - but the response still holds the buffered content, and leaving it to the
+            // finalizer keeps one message's worth of it alive per event.
+            using HttpResponseMessage result = await httpClient.PostAsync(DefaultHttpUriPath, content).ConfigureAwait(false);
 
             // A 413 has one cause and one fix, and neither is obvious from the bare status code.
             if (result.StatusCode == HttpStatusCode.RequestEntityTooLarge)

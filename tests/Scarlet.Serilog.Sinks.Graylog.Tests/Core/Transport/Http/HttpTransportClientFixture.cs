@@ -104,6 +104,92 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
         }
 
         [Fact]
+        public void ConfiguredClient_AppliesTheConfiguredTimeout()
+        {
+            using HttpClient client = Configure(OptionsFor("http://logs.example.org:12201",
+                                                           o => o.Timeout = TimeSpan.FromSeconds(7)));
+
+            Assert.Equal(TimeSpan.FromSeconds(7), client.Timeout);
+        }
+
+        /// <summary>
+        /// A sink that hangs for HttpClient's 100-second default holds a shutdown slot and, under
+        /// batching, everything queued behind it.
+        /// </summary>
+        [Fact]
+        public void ConfiguredClient_ByDefault_BoundsARequestWellInsideHttpClientsOwnDefault()
+        {
+            using HttpClient client = Configure(OptionsFor("http://logs.example.org:12201"));
+
+            Assert.Equal(TimeSpan.FromSeconds(30), client.Timeout);
+            Assert.True(client.Timeout < TimeSpan.FromSeconds(100));
+        }
+
+        [Fact]
+        public void ConfiguredClient_WithoutATimeout_LeavesHttpClientsDefault()
+        {
+            using HttpClient client = Configure(OptionsFor("http://logs.example.org:12201", o => o.Timeout = null));
+
+            Assert.Equal(TimeSpan.FromSeconds(100), client.Timeout);
+        }
+
+        /// <summary>
+        /// The pool resolves the Graylog host when it opens a connection and not again, so without a
+        /// lifetime a process that has been up for weeks still posts to the address it resolved at
+        /// startup - the one failure mode the UDP and TCP transports both handle and this one did not.
+        /// </summary>
+        [Fact]
+        public void CreatedHandler_RetiresPooledConnectionsSoADnsChangeIsPickedUp()
+        {
+            HttpTransportOptions options = OptionsFor("http://logs.example.org:12201",
+                                                      o => o.ConnectionLifetime = TimeSpan.FromMinutes(5));
+
+            using var target = new RealHttpClientTransportClient(options);
+
+            using HttpMessageHandler handler = target.CreateHandler();
+
+            Assert.Equal(TimeSpan.FromMinutes(5), Assert.IsType<SocketsHttpHandler>(handler).PooledConnectionLifetime);
+        }
+
+        [Fact]
+        public void CreatedHandler_ByDefault_RetiresPooledConnections()
+        {
+            using var target = new RealHttpClientTransportClient(OptionsFor("http://logs.example.org:12201"));
+
+            using HttpMessageHandler handler = target.CreateHandler();
+
+            Assert.Equal(TimeSpan.FromMinutes(2), Assert.IsType<SocketsHttpHandler>(handler).PooledConnectionLifetime);
+        }
+
+        [Fact]
+        public void CreatedHandler_WithoutAConnectionLifetime_KeepsConnectionsForever()
+        {
+            HttpTransportOptions options = OptionsFor("http://logs.example.org:12201", o => o.ConnectionLifetime = null);
+
+            using var target = new RealHttpClientTransportClient(options);
+
+            using HttpMessageHandler handler = target.CreateHandler();
+
+            Assert.Equal(System.Threading.Timeout.InfiniteTimeSpan,
+                         Assert.IsType<SocketsHttpHandler>(handler).PooledConnectionLifetime);
+        }
+
+        /// <summary>
+        /// The response holds the buffered body; left to the finalizer that is one message's worth of
+        /// it alive per event.
+        /// </summary>
+        [Fact]
+        public async Task Send_DisposesTheResponse()
+        {
+            using var target = new ProbeHttpTransportClient(OptionsFor("http://logs.example.org:12201"));
+
+            await target.Send("{}");
+
+            Assert.NotNull(target.Handler.Response);
+            Assert.True(target.Handler.Response.IsDisposed);
+        }
+
+        [Fact]
         public void ConfiguredClient_WithoutAnEndpoint_Throws()
         {
             var exception = Assert.Throws<InvalidOperationException>(() => Configure(new HttpTransportOptions()));
@@ -415,6 +501,11 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
             {
                 return CreateHttpClient();
             }
+
+            public HttpMessageHandler CreateHandler()
+            {
+                return CreateHttpMessageHandler();
+            }
         }
 
         /// <summary>
@@ -449,6 +540,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
 
             public string? Body { get; private set; }
 
+            public TrackingResponse? Response { get; private set; }
+
             protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
                                                                         CancellationToken cancellationToken)
             {
@@ -459,7 +552,29 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
                     Body = await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                 }
 
-                return new HttpResponseMessage(_status);
+                Response = new TrackingResponse(_status);
+
+                return Response;
+            }
+        }
+
+        /// <summary>
+        /// A response that records whether the transport released it.
+        /// </summary>
+        private sealed class TrackingResponse : HttpResponseMessage
+        {
+            public TrackingResponse(HttpStatusCode status)
+                : base(status)
+            {
+            }
+
+            public bool IsDisposed { get; private set; }
+
+            protected override void Dispose(bool disposing)
+            {
+                IsDisposed = true;
+
+                base.Dispose(disposing);
             }
         }
     }

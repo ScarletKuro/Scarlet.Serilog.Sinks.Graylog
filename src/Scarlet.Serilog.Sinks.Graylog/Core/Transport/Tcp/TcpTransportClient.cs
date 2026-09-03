@@ -175,45 +175,108 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
 
         private async Task ConnectWithTimeout(TcpClient client, IPAddress address, int port)
         {
-            Task connect = client.ConnectAsync(address, port);
-            if (!_options.ConnectTimeout.HasValue)
+            if (_options.ConnectTimeout is not { } timeout)
             {
-                await connect.ConfigureAwait(false);
+                await client.ConnectAsync(address, port).ConfigureAwait(false);
                 return;
             }
 
-            if (await Task.WhenAny(connect, Task.Delay(_options.ConnectTimeout.Value)).ConfigureAwait(false) != connect)
+#if NET
+            // Cancellation actually aborts the connect here, so the socket is not left dialling in the
+            // background after the caller has given up on it.
+            using var timeoutSource = new CancellationTokenSource(timeout);
+
+            try
+            {
+                await client.ConnectAsync(address, port, timeoutSource.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (timeoutSource.IsCancellationRequested)
             {
                 throw new TimeoutException("The TCP connection timed out.");
             }
-
-            await connect.ConfigureAwait(false);
+#else
+            await AwaitWithTimeout(client.ConnectAsync(address, port), timeout, "connection").ConfigureAwait(false);
+#endif
         }
 
         private async Task WriteWithTimeout(Stream stream, byte[] payload)
         {
-#if !NET
-            Task write = stream.WriteAsync(payload, 0, payload.Length);
-#else
-            Task write = stream.WriteAsync(payload).AsTask();
-#endif
-            await AwaitWithTimeout(write, _options.WriteTimeout, "write").ConfigureAwait(false);
-            await AwaitWithTimeout(stream.FlushAsync(), _options.WriteTimeout, "flush").ConfigureAwait(false);
-        }
-
-        private static async Task AwaitWithTimeout(Task operation, TimeSpan? timeout, string operationName)
-        {
-            if (!timeout.HasValue)
+            if (_options.WriteTimeout is not { } timeout)
             {
-                await operation.ConfigureAwait(false);
+#if NET
+                await stream.WriteAsync(payload).ConfigureAwait(false);
+#else
+                await stream.WriteAsync(payload, 0, payload.Length).ConfigureAwait(false);
+#endif
+                await stream.FlushAsync().ConfigureAwait(false);
+
                 return;
             }
 
-            if (await Task.WhenAny(operation, Task.Delay(timeout.Value)).ConfigureAwait(false) != operation)
+#if NET
+            // One source for both halves: the timeout covers getting the frame out, not each call
+            // separately, and cancelling it tears the write down rather than leaving it running against
+            // a stream the caller is about to close.
+            using var timeoutSource = new CancellationTokenSource(timeout);
+
+            try
+            {
+                await stream.WriteAsync(payload, timeoutSource.Token).ConfigureAwait(false);
+                await stream.FlushAsync(timeoutSource.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (timeoutSource.IsCancellationRequested)
+            {
+                throw new TimeoutException("The TCP write timed out.");
+            }
+#else
+            await AwaitWithTimeout(stream.WriteAsync(payload, 0, payload.Length), timeout, "write").ConfigureAwait(false);
+            await AwaitWithTimeout(stream.FlushAsync(), timeout, "flush").ConfigureAwait(false);
+#endif
+        }
+
+#if !NET
+        /// <summary>
+        /// Awaits <paramref name="operation"/>, giving up after <paramref name="timeout"/>.
+        /// </summary>
+        /// <remarks>
+        /// The fallback for frameworks whose stream and socket APIs take no <see cref="CancellationToken"/>,
+        /// where nothing can stop the operation itself - only stop waiting on it. Two details matter.
+        /// The delay is cancelled once the race is decided, so a short timeout on a busy sink does not
+        /// leave a timer per send queued until it fires; and an abandoned operation is observed, so the
+        /// exception it fails with later cannot resurface as an unobserved task exception - fatal to the
+        /// process on a .NET Framework application configured with
+        /// <c>&lt;ThrowUnobservedTaskExceptions enabled="true"/&gt;</c>.
+        /// </remarks>
+        private static async Task AwaitWithTimeout(Task operation, TimeSpan timeout, string operationName)
+        {
+            using var timeoutSource = new CancellationTokenSource();
+
+            Task delay = Task.Delay(timeout, timeoutSource.Token);
+
+            if (await Task.WhenAny(operation, delay).ConfigureAwait(false) != operation)
+            {
+                Observe(operation);
+
                 throw new TimeoutException($"The TCP {operationName} timed out.");
+            }
+
+            timeoutSource.Cancel();
 
             await operation.ConfigureAwait(false);
         }
+
+        /// <summary>
+        /// Swallows the eventual outcome of an operation nobody is waiting on any more.
+        /// </summary>
+        private static void Observe(Task operation)
+        {
+            operation.ContinueWith(
+                static task => _ = task.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
+#endif
 
         private void CloseConnection()
         {
