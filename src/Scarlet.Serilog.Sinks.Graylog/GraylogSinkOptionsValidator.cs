@@ -15,6 +15,7 @@ internal static class GraylogSinkOptionsValidator
     {
         Require(options.Message, nameof(options.Message));
         Require(options.Delivery, nameof(options.Delivery));
+        ValidateTimeout(options.Delivery.ShutdownTimeout, nameof(options.Delivery.ShutdownTimeout));
 
         switch (options.TransportType)
         {

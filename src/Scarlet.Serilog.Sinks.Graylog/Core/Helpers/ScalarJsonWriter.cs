@@ -241,27 +241,18 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
         /// </remarks>
         private static JsonNode? WriteEnum(Enum value)
         {
-            switch (Convert.GetTypeCode(value))
+            return Convert.GetTypeCode(value) switch
             {
-                case TypeCode.Byte:
-                    return JsonValue.Create((byte)(object)value);
-                case TypeCode.SByte:
-                    return JsonValue.Create((sbyte)(object)value);
-                case TypeCode.Int16:
-                    return JsonValue.Create((short)(object)value);
-                case TypeCode.UInt16:
-                    return JsonValue.Create((ushort)(object)value);
-                case TypeCode.Int32:
-                    return JsonValue.Create((int)(object)value);
-                case TypeCode.UInt32:
-                    return JsonValue.Create((uint)(object)value);
-                case TypeCode.Int64:
-                    return JsonValue.Create((long)(object)value);
-                case TypeCode.UInt64:
-                    return JsonValue.Create((ulong)(object)value);
-                default:
-                    return JsonValue.Create(value.ToString());
-            }
+                TypeCode.Byte => JsonValue.Create((byte)(object)value),
+                TypeCode.SByte => JsonValue.Create((sbyte)(object)value),
+                TypeCode.Int16 => JsonValue.Create((short)(object)value),
+                TypeCode.UInt16 => JsonValue.Create((ushort)(object)value),
+                TypeCode.Int32 => JsonValue.Create((int)(object)value),
+                TypeCode.UInt32 => JsonValue.Create((uint)(object)value),
+                TypeCode.Int64 => JsonValue.Create((long)(object)value),
+                TypeCode.UInt64 => JsonValue.Create((ulong)(object)value),
+                _ => JsonValue.Create(value.ToString())
+            };
         }
     }
 }

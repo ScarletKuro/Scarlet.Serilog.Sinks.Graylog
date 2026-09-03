@@ -211,6 +211,12 @@ The options object is the only registration API; omit `Delivery.Batching` for im
 > **A batched logger must be disposed, or flushed with `Log.CloseAndFlush()`** — otherwise the tail
 > of the buffer is lost at shutdown.
 
+Without batching, an event is sent as it is emitted, but `Emit` does not wait for the send to finish
+— blocking there would deadlock any caller with a single-threaded synchronization context. Disposing
+the logger waits for whatever is still in flight, for up to `Delivery.ShutdownTimeout` (10 seconds by
+default; `null` opts out of waiting). On `net8.0` and later the sink also implements
+`IAsyncDisposable`, so `await Log.CloseAndFlushAsync()` drains it without blocking a thread.
+
 In `appsettings.json` (note that `TimeSpan` values use `TimeSpan.Parse` format, so `"00:00:05"`, not `"5s"`):
 
 ```json

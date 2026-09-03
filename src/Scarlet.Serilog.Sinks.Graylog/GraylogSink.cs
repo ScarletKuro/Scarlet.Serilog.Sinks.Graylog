@@ -4,6 +4,7 @@ using Serilog.Events;
 using Scarlet.Serilog.Sinks.Graylog.Core;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading;
@@ -31,10 +32,21 @@ namespace Scarlet.Serilog.Sinks.Graylog
     /// </para>
     /// </remarks>
     public sealed class GraylogSink : ILogEventSink, IBatchedLogEventSink, IDisposable
+#if NET
+        , IAsyncDisposable
+#endif
     {
         private readonly Lazy<IGelfConverter> _converter;
         private readonly Lazy<ITransport> _transport;
         private readonly JsonSerializerOptions _options;
+        private readonly TimeSpan? _shutdownTimeout;
+
+        /// <summary>
+        /// Sends started by <see cref="Emit"/> that have not finished yet, so disposal can wait for
+        /// them instead of tearing the transport down underneath them.
+        /// </summary>
+        private readonly ConcurrentDictionary<Task, byte> _inFlight = new ConcurrentDictionary<Task, byte>();
+
         private bool _disposed;
 
         /// <summary>
@@ -56,6 +68,7 @@ namespace Scarlet.Serilog.Sinks.Graylog
             var jsonSerializerOptions = options.Message.JsonSerializerOptions ?? new JsonSerializerOptions(JsonSerializerDefaults.General);
             _options = new JsonSerializerOptions(jsonSerializerOptions);
 
+            _shutdownTimeout = options.Delivery.ShutdownTimeout;
             _transport = new Lazy<ITransport>(sinkComponentsBuilder.MakeTransport);
             _converter = new Lazy<IGelfConverter>(() => sinkComponentsBuilder.MakeGelfConverter());
         }
@@ -78,13 +91,49 @@ namespace Scarlet.Serilog.Sinks.Graylog
         /// </remarks>
         public void Emit(LogEvent logEvent)
         {
-            SendAsync(logEvent).ContinueWith(
-                static task => SelfLog.WriteLine("Could not send a log event to Graylog: {0}", task.Exception?.GetBaseException()),
+            Task send = SendAsync(logEvent);
+
+            if (send.IsCompleted)
+            {
+                Report(send);
+
+                return;
+            }
+
+            // What Dispose waits on is the reporting continuation, not the send. Waiting on the send
+            // alone let the process exit between the send completing and the diagnostic reaching
+            // SelfLog, so a failed delivery could disappear without a trace.
+            Task reported = send.ContinueWith(
+                static (task, _) => Report(task),
+                null,
                 CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted,
+                TaskContinuationOptions.ExecuteSynchronously,
                 // Never the ambient scheduler: on a UI thread that would queue the diagnostic behind
                 // whatever the application is doing.
                 TaskScheduler.Default);
+
+            // Registered before the remover is attached, so the remover cannot run first and leave a
+            // completed entry behind for the lifetime of the sink.
+            _inFlight[reported] = 0;
+
+            reported.ContinueWith(
+                static (task, state) => ((GraylogSink)state!)._inFlight.TryRemove(task, out _),
+                this,
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
+
+        /// <summary>
+        /// Reports a failed send to <see cref="SelfLog"/>, and observes the exception either way so it
+        /// never surfaces as an unobserved task exception.
+        /// </summary>
+        private static void Report(Task send)
+        {
+            if (send.IsFaulted)
+            {
+                SelfLog.WriteLine("Could not send a log event to Graylog: {0}", send.Exception?.GetBaseException());
+            }
         }
 
         /// <inheritdoc />
@@ -137,6 +186,72 @@ namespace Scarlet.Serilog.Sinks.Graylog
 
             _disposed = true;
 
+            Task[] pending = TakePending();
+
+            if (pending.Length > 0 && _shutdownTimeout is { } timeout)
+            {
+                try
+                {
+                    // Safe to block: every await in the send path uses ConfigureAwait(false), so no
+                    // continuation is waiting on the caller's synchronization context.
+                    Task.WaitAll(pending, timeout);
+                } catch (AggregateException)
+                {
+                    // Each send already reported itself to SelfLog through its own continuation.
+                }
+            }
+
+            DisposeTransport();
+        }
+
+#if NET
+        /// <summary>
+        /// Waits for sends that are already in flight, then releases the transport.
+        /// </summary>
+        /// <remarks>
+        /// Serilog prefers this over <see cref="Dispose()"/> when it is available, so
+        /// <c>await Log.CloseAndFlushAsync()</c> drains the sink without blocking a thread.
+        /// </remarks>
+        public async ValueTask DisposeAsync()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+
+            Task[] pending = TakePending();
+
+            if (pending.Length > 0 && _shutdownTimeout is { } timeout)
+            {
+                Task all = Task.WhenAll(pending);
+
+                await Task.WhenAny(all, Task.Delay(timeout)).ConfigureAwait(false);
+
+                // Observed so a faulted batch cannot resurface as an unobserved task exception; the
+                // individual failures already reached SelfLog.
+                _ = all.Exception;
+            }
+
+            DisposeTransport();
+        }
+#endif
+
+        private Task[] TakePending()
+        {
+            var pending = new List<Task>(_inFlight.Count);
+
+            foreach (Task send in _inFlight.Keys)
+            {
+                pending.Add(send);
+            }
+
+            return pending.ToArray();
+        }
+
+        private void DisposeTransport()
+        {
             // Don't materialise the transport just to tear it down.
             if (_transport.IsValueCreated)
             {

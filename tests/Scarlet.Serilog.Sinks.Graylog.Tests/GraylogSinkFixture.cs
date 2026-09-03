@@ -9,6 +9,7 @@ using Scarlet.Serilog.Sinks.Graylog.Core;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -81,6 +82,134 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
 
             neverCompletes.SetResult(true);
             uiThread.Join();
+        }
+
+        /// <summary>
+        /// Emit deliberately does not wait for the send - blocking there deadlocks a single-threaded
+        /// synchronization context - but disposal has to, or a process that exits shortly after
+        /// logging loses whatever was still on the wire, silently.
+        /// </summary>
+        /// <summary>
+        /// Disposal must not return until a failed send has actually reached SelfLog. Waiting on the
+        /// send alone left a window where the process exited between the send completing and its
+        /// reporting continuation running, and the failure vanished without a trace.
+        /// </summary>
+        [Fact]
+        public void Dispose_WhenASendFails_ReportsToSelfLogBeforeReturning()
+        {
+            const string failure = "graylog refused the batch";
+            int reported = 0;
+            RecordingTransport transport = new(async _ =>
+            {
+                await Task.Delay(150);
+                throw new InvalidOperationException(failure);
+            });
+
+            var sink = new GraylogSink(transport.SinkOptions());
+
+            // SelfLog is global and other classes run in parallel, so react only to this failure.
+            SelfLog.Enable(message =>
+            {
+                if (message.Contains(failure))
+                {
+                    Interlocked.Increment(ref reported);
+                }
+            });
+
+            try
+            {
+                sink.Emit(LogEventSource.GetSimpleLogEvent(DateTimeOffset.UnixEpoch));
+
+                sink.Dispose();
+
+                Assert.Equal(1, Volatile.Read(ref reported));
+            } finally
+            {
+                SelfLog.Disable();
+            }
+        }
+
+        [Fact]
+        public void Dispose_WaitsForSendsAlreadyInFlight()
+        {
+            int completed = 0;
+            RecordingTransport transport = new(async _ =>
+            {
+                await Task.Delay(200);
+                Interlocked.Increment(ref completed);
+            });
+
+            var sink = new GraylogSink(transport.SinkOptions());
+            sink.Emit(LogEventSource.GetSimpleLogEvent(DateTimeOffset.UnixEpoch));
+
+            sink.Dispose();
+
+            Assert.Equal(1, Volatile.Read(ref completed));
+        }
+
+        [Fact]
+        public async Task DisposeAsync_WaitsForSendsAlreadyInFlight()
+        {
+            int completed = 0;
+            RecordingTransport transport = new(async _ =>
+            {
+                await Task.Delay(200);
+                Interlocked.Increment(ref completed);
+            });
+
+            var sink = new GraylogSink(transport.SinkOptions());
+            sink.Emit(LogEventSource.GetSimpleLogEvent(DateTimeOffset.UnixEpoch));
+
+            await sink.DisposeAsync();
+
+            Assert.Equal(1, Volatile.Read(ref completed));
+        }
+
+        /// <summary>
+        /// The wait is bounded, so an unreachable Graylog cannot hold up process exit.
+        /// </summary>
+        [Fact]
+        public void Dispose_WhenASendNeverCompletes_GivesUpAfterTheTimeout()
+        {
+            var neverCompletes = new TaskCompletionSource<bool>();
+            RecordingTransport transport = new(_ => neverCompletes.Task);
+
+            var sink = new GraylogSink(transport.SinkOptions(
+                o => o.Delivery.ShutdownTimeout = TimeSpan.FromMilliseconds(250)));
+            sink.Emit(LogEventSource.GetSimpleLogEvent(DateTimeOffset.UnixEpoch));
+
+            var elapsed = Stopwatch.StartNew();
+            sink.Dispose();
+            elapsed.Stop();
+
+            Assert.InRange(elapsed.Elapsed, TimeSpan.FromMilliseconds(100), TimeSpan.FromSeconds(10));
+
+            neverCompletes.SetResult(true);
+        }
+
+        /// <summary>
+        /// A null timeout opts out of waiting entirely, for anyone who would rather lose the tail
+        /// than add anything at all to shutdown.
+        /// </summary>
+        [Fact]
+        public void Dispose_WhenShutdownTimeoutIsNull_DoesNotWait()
+        {
+            int completed = 0;
+            RecordingTransport transport = new(async _ =>
+            {
+                await Task.Delay(2000);
+                Interlocked.Increment(ref completed);
+            });
+
+            var sink = new GraylogSink(transport.SinkOptions(o => o.Delivery.ShutdownTimeout = null));
+            sink.Emit(LogEventSource.GetSimpleLogEvent(DateTimeOffset.UnixEpoch));
+
+            var elapsed = Stopwatch.StartNew();
+            sink.Dispose();
+            elapsed.Stop();
+
+            Assert.Equal(0, Volatile.Read(ref completed));
+            Assert.True(elapsed.Elapsed < TimeSpan.FromSeconds(1), $"Dispose took {elapsed.Elapsed}");
         }
 
         /// <summary>
