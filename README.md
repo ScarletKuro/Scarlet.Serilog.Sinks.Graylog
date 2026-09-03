@@ -171,11 +171,14 @@ transport.
 
 ## GELF field names
 
-Serilog property names become GELF additional fields. GELF only recognises fields prefixed with `_`
-and verifies the rest against `^[\w.\-]*$`, so the sink prefixes every field and replaces any other
-character with an underscore — relevant mainly to dictionary keys, which can be arbitrary strings.
-`_id` is reserved by Graylog, so a property called `id` is written as `_id_`. Two names that end up
-identical after that are written last-wins.
+Serilog property names become GELF additional fields. GELF requires each one to carry a leading `_`
+and to match `^[\w.\-]*$`, so the sink prefixes every field and replaces any other character with an
+underscore — relevant mainly to dictionary keys, which can be arbitrary strings. This is not
+cosmetic: Graylog validates the name and **drops a field whose name contains anything else**, so an
+unsanitized key such as `k8s:pod` loses its value entirely. `_id` is reserved, so a property called
+`id` is written as `_id_`. Two names that end up identical after sanitizing are written last-wins.
+
+Graylog strips the leading underscore again on the way in, so `_UserId` is searchable as `UserId`.
 
 ## Batching
 

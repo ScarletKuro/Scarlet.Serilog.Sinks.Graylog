@@ -128,11 +128,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
         /// <param name="name">The field name, without the leading underscore.</param>
         /// <param name="value">The value; <c>null</c> is written as a JSON null.</param>
         /// <remarks>
-        /// Graylog only promotes underscore-prefixed fields to additional fields, reserves <c>_id</c>,
-        /// and accepts only <c>^[\w\.\-]*$</c> in a field name - anything else is replaced with an
-        /// underscore. Two names that collide after that are written last-wins rather than throwing,
-        /// because <c>JsonObject.Add</c> would take the whole event down with an
-        /// <see cref="ArgumentException"/>.
+        /// GELF requires additional fields to carry a leading underscore, reserves <c>_id</c>, and accepts
+        /// only <c>^[\w\.\-]*$</c> in a field name - anything else is replaced with an underscore.
+        /// The character rule is the one that bites: Graylog drops a field with an invalid name outright,
+        /// so an unsanitized dictionary key loses the value. Two names that collide after sanitizing are
+        /// written last-wins rather than throwing, because <c>JsonObject.Add</c> would take the whole
+        /// event down with an <see cref="ArgumentException"/>.
         /// </remarks>
         protected static void AddGelfField(JsonObject target, string name, JsonNode? value)
         {

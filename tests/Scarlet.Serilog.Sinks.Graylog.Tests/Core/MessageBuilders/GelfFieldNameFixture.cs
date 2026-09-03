@@ -10,16 +10,16 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
     /// Tests for the names the builder gives GELF additional fields.
     /// </summary>
     /// <remarks>
-    /// Graylog only promotes underscore-prefixed fields to additional fields, reserves <c>_id</c>, and
-    /// verifies names against <c>^[\w\.\-]*$</c>. A field that breaks any of those is dropped on the
-    /// server, silently, so these are wire-compatibility tests rather than cosmetics.
+    /// GELF requires additional fields to carry a leading underscore, reserves <c>_id</c>, and verifies
+    /// names against <c>^[\w\.\-]*$</c>. Graylog drops a field whose name breaks the character rule
+    /// outright, so these are wire-compatibility tests rather than cosmetics.
     /// </remarks>
     public class GelfFieldNameFixture
     {
         /// <summary>
-        /// The sequence and dictionary branches used to write the bare property name, so an array or
-        /// dictionary property never became an additional field at all - and with the default
-        /// <c>ParseArrayValues = false</c> it was the only representation, so the value was lost.
+        /// The sequence and dictionary branches wrote the bare property name, so the payload was not a
+        /// valid GELF message. Graylog itself strips the prefix and would have taken it either way, but
+        /// anything else that speaks GELF is entitled to require it.
         /// </summary>
         [Fact]
         public void Build_SequenceValue_IsUnderscorePrefixed()
