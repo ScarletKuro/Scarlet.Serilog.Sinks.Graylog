@@ -209,6 +209,22 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
             Assert.Equal("http://logs.example.org:12201/testgelf/gelf", request.RequestUri.ToString());
         }
 
+        /// <summary>
+        /// A 413 means the GELF input's max_chunk_size was exceeded, and GELF has no chunking over HTTP,
+        /// so the bare status code leaves the reader with nothing to act on.
+        /// </summary>
+        [Fact]
+        public async Task Send_WhenTheMessageIsTooLarge_SaysWhichSettingCapsIt()
+        {
+            using var target = new ProbeHttpTransportClient(OptionsFor("http://logs.example.org:12201"),
+                                                            HttpStatusCode.RequestEntityTooLarge);
+
+            HttpRequestException exception = await Assert.ThrowsAsync<HttpRequestException>(() => target.Send("{}"));
+
+            Assert.Contains("max_chunk_size", exception.Message);
+            Assert.Contains("2-byte", exception.Message);
+        }
+
         [Fact]
         public async Task Send_WhenTheServerRejectsTheMessage_Throws()
         {

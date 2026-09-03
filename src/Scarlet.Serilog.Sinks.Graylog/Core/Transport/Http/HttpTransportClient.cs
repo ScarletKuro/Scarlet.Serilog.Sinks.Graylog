@@ -143,6 +143,16 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
 
             HttpResponseMessage result = await httpClient.PostAsync(DefaultHttpUriPath, content).ConfigureAwait(false);
 
+            // A 413 has one cause and one fix, and neither is obvious from the bare status code.
+            if (result.StatusCode == HttpStatusCode.RequestEntityTooLarge)
+            {
+                throw new HttpRequestException(
+                    $"Graylog rejected a {Encoding.UTF8.GetByteCount(message)}-byte GELF message as too large. "
+                    + "The HTTP input caps the decompressed message at its 'max_chunk_size', 65536 bytes by default, "
+                    + "and GELF defines no chunking over HTTP - raise that setting on the input, shorten the event, "
+                    + "or use the UDP or TCP transport, which do split large messages.");
+            }
+
             // Throwing rather than swallowing is what lets Serilog's batching sink see the failure
             // and retry the batch; the unbatched path reports it through GraylogSink.Emit's
             // fault continuation.

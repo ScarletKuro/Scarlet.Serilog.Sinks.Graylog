@@ -1,14 +1,12 @@
 # Scarlet.Serilog.Sinks.Graylog
 
-A maintained fork of [Serilog.Sinks.Graylog](https://github.com/whir1/serilog-sinks-graylog) by Anton Volkov, which has not received updates for a long time.
-
-## Status
-
 [![CI](https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/actions/workflows/ci.yml/badge.svg)](https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/github/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/graph/badge.svg?token=078OUYMY7Z)](https://codecov.io/github/ScarletKuro/Scarlet.Serilog.Sinks.Graylog)
 [![Nuget](https://img.shields.io/nuget/v/Scarlet.Serilog.Sinks.Graylog?color=ff4081&logo=nuget)](https://www.nuget.org/packages/Scarlet.Serilog.Sinks.Graylog/)
 [![Nuget](https://img.shields.io/nuget/dt/Scarlet.Serilog.Sinks.Graylog?color=ff4081&label=nuget%20downloads&logo=nuget)](https://www.nuget.org/packages/Scarlet.Serilog.Sinks.Graylog/)
 [![GitHub](https://img.shields.io/github/license/ScarletKuro/Scarlet.Serilog.Sinks.Graylog?color=594ae2&logo=github)](https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/blob/main/LICENSE)
+
+A maintained fork of [Serilog.Sinks.Graylog](https://github.com/whir1/serilog-sinks-graylog) by Anton Volkov, which has not received updates for a long time.
 
 ## Migrating from Serilog.Sinks.Graylog
 
@@ -189,6 +187,22 @@ written last-wins.
 **Booleans are written as the strings `"true"` and `"false"`.** Graylog drops boolean additional
 fields, so a `bool` property would otherwise vanish from the message. As text it survives and stays
 searchable as `MyFlag:true`. Numbers are unaffected and stay numeric.
+
+
+## Message size limits
+
+These are Graylog and search-backend limits, not sink settings, but they decide whether a large event
+survives:
+
+| Limit | Where | Effect |
+| --- | --- | --- |
+| `max_chunk_size`, 65536 bytes | GELF **HTTP** input | The whole GELF message must fit. Applied *after* decompression, so compressing the request buys nothing. GELF defines no chunking over HTTP, so an oversized event is rejected with `413`; the sink reports which setting caused it. |
+| 128 chunks × `Udp.MaximumDatagramSize` | GELF **UDP** input | About 1 MB with the 8192-byte default. Larger payloads throw `ArgumentException`. |
+| `max_message_size`, 2 MB | GELF **TCP** input | The frame must fit. TCP streams, so this is the most permissive transport for large events. |
+| 32766 bytes per field value | OpenSearch / Elasticsearch | Additional fields are mapped as `keyword`. A single property longer than this makes the **whole message** fail to index, after the sink delivered it successfully — it shows up in Graylog's *Indexer failures*, not in the sink's logs. |
+
+If events can be large, prefer TCP or UDP over HTTP, and keep individual property values well under
+32 KB.
 
 ## Batching
 
