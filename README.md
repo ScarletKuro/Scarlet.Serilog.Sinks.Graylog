@@ -2,8 +2,8 @@
 
 [![CI](https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/actions/workflows/ci.yml/badge.svg)](https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/github/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/graph/badge.svg?token=078OUYMY7Z)](https://codecov.io/github/ScarletKuro/Scarlet.Serilog.Sinks.Graylog)
-[![Nuget](https://img.shields.io/nuget/v/Scarlet.Serilog.Sinks.Graylog?color=ff4081&logo=nuget)](https://www.nuget.org/packages/Scarlet.Serilog.Sinks.Graylog/)
-[![Nuget](https://img.shields.io/nuget/dt/Scarlet.Serilog.Sinks.Graylog?color=ff4081&label=nuget%20downloads&logo=nuget)](https://www.nuget.org/packages/Scarlet.Serilog.Sinks.Graylog/)
+[![Nuget](https://img.shields.io/nuget/v/Scarlet.Serilog.Sinks.Graylog?color=ff4081&logo=nuget)](https://www.nuget.org/packages/Scarlet.Serilog.Sinks.Graylog)
+[![Nuget](https://img.shields.io/nuget/dt/Scarlet.Serilog.Sinks.Graylog?logo=nuget&label=nuget%20downloads&color=ff4081)](https://www.nuget.org/packages/Scarlet.Serilog.Sinks.Graylog)
 [![GitHub](https://img.shields.io/github/license/ScarletKuro/Scarlet.Serilog.Sinks.Graylog?color=594ae2&logo=github)](https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/blob/main/LICENSE)
 
 A maintained fork of [Serilog.Sinks.Graylog](https://github.com/serilog-contrib/serilog-sinks-graylog) by Anton Volkov, which has not received updates for a long time.
