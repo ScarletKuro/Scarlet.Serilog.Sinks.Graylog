@@ -121,6 +121,28 @@ Graylog certificate.
 Client certificates (mutual TLS) are not currently supported. GELF over UDP does not support TLS;
 use TCP or HTTP when encryption in transit is required.
 
+### HTTP custom headers
+
+Set `HttpHeaders` when a reverse proxy or API gateway requires request headers. These headers are
+sent with every GELF HTTP request. A custom `Authorization` header takes precedence over
+`UsernameInHttp` and `PasswordInHttp`, allowing bearer-token authentication.
+
+```csharp
+new GraylogSinkOptions
+{
+    HostnameOrAddress = "https://logs.example.org/project",
+    Port = 12201,
+    TransportType = TransportType.Http,
+    HttpHeaders = new Dictionary<string, string>
+    {
+        ["X-Graylog-Tenant"] = "payments",
+        ["Authorization"] = "Bearer <token>"
+    }
+};
+```
+
+`Content-Type` cannot be overridden; the transport always sends JSON as `application/json`.
+
 All options you can see at
 [`GraylogSinkOptions.cs`](https://github.com/ScarletKuro/Scarlet.Serilog.Sinks.Graylog/blob/master/src/Scarlet.Serilog.Sinks.Graylog/GraylogSinkOptions.cs)
 (which adds `Batching`) and its base

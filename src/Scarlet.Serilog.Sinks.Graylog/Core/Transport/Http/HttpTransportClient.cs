@@ -57,6 +57,35 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
             {
                 httpClient.DefaultRequestHeaders.Authorization = authenticationHeaderValue;
             }
+
+            ConfigureCustomHeaders(httpClient);
+        }
+
+        private void ConfigureCustomHeaders(HttpClient httpClient)
+        {
+            if (options.HttpHeaders == null)
+            {
+                return;
+            }
+
+            foreach (var header in options.HttpHeaders)
+            {
+                if (string.IsNullOrWhiteSpace(header.Key))
+                {
+                    throw new InvalidOperationException("HTTP header names must not be empty.");
+                }
+
+                if (header.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException("The HTTP transport always sends application/json content.");
+                }
+
+                httpClient.DefaultRequestHeaders.Remove(header.Key);
+                if (!httpClient.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value))
+                {
+                    throw new InvalidOperationException($"The HTTP header '{header.Key}' could not be configured.");
+                }
+            }
         }
 
         private HttpClient CreateConfiguredHttpClient()

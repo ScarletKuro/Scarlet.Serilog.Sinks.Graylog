@@ -1,5 +1,6 @@
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -139,6 +140,42 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
             await Task.WhenAll(Enumerable.Range(0, 16).Select(_ => target.Send("{}")));
 
             Assert.Equal(1, target.CreateHttpClientCount);
+        }
+
+        [Fact]
+        public async Task Send_WithCustomHeaders_AddsThemToTheRequestAndOverridesBasicAuthentication()
+        {
+            using var target = new ProbeHttpTransportClient(OptionsFor("http://logs.example.org", o =>
+            {
+                o.UsernameInHttp = "username";
+                o.PasswordInHttp = "password";
+                o.HttpHeaders = new Dictionary<string, string>
+                {
+                    ["X-Graylog-Tenant"] = "payments",
+                    ["Authorization"] = "Bearer proxy-token"
+                };
+            }));
+
+            await target.Send("{}");
+
+            HttpRequestMessage? request = target.Handler.Request;
+
+            Assert.NotNull(request);
+            Assert.Equal("payments", Assert.Single(request.Headers.GetValues("X-Graylog-Tenant")));
+            Assert.NotNull(request.Headers.Authorization);
+            Assert.Equal("Bearer", request.Headers.Authorization.Scheme);
+            Assert.Equal("proxy-token", request.Headers.Authorization.Parameter);
+        }
+
+        [Fact]
+        public void ConfiguredClient_WithAContentTypeHeader_Throws()
+        {
+            GraylogSinkOptions options = OptionsFor("http://logs.example.org", o =>
+                o.HttpHeaders = new Dictionary<string, string> { ["Content-Type"] = "text/plain" });
+
+            InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => Configure(options));
+
+            Assert.Equal("The HTTP transport always sends application/json content.", exception.Message);
         }
 
         /// <summary>

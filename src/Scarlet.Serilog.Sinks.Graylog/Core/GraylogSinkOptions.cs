@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Serilog.Events;
 using Scarlet.Serilog.Sinks.Graylog.Core.Helpers;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
@@ -201,6 +202,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core
         /// Gets or sets the password in http
         /// </summary>
         public string? PasswordInHttp { get; set; }
+
+        /// <summary>
+        /// Gets or sets additional request headers for the HTTP transport. Custom headers override
+        /// the HTTP Basic authentication header when both configure <c>Authorization</c>.
+        /// </summary>
+        public Dictionary<string, string>? HttpHeaders { get; set; }
 
         /// <summary>
         /// For custom implementations of ITransport
