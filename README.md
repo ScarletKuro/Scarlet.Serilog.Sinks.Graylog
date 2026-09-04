@@ -384,29 +384,11 @@ Two defaults worth knowing:
 - Configure the sink **in code**. `ReadFrom.Configuration` (`Serilog.Settings.Configuration`) binds
   sink arguments reflectively and is not AOT-friendly. It is not a dependency of this package.
 
-## Running the tests
+## Contributing
 
-```powershell
-dotnet test scarlet-serilog-sinks-graylog.slnx -- --filter-not-trait "Category=Integration"
-```
-
-That is the default run and needs nothing installed: every transport is exercised against loopback
-servers in-process.
-
-The tests tagged `Category=Integration` send GELF to a **real Graylog** over UDP, TCP and HTTP and
-read the stored message back out of its search API — the only way to check the things a loopback
-server cannot answer, such as whether Graylog accepts a field name, reassembles a chunked datagram,
-or finishes reading a null-terminated TCP frame. They need a server:
-
-```powershell
-docker compose -f tests/integration/docker-compose.yml up -d --wait
-dotnet test scarlet-serilog-sinks-graylog.slnx -f net10.0 -- --filter-trait "Category=Integration"
-docker compose -f tests/integration/docker-compose.yml down -v
-```
-
-The test fixture creates the three GELF inputs itself, so the server needs no setup. Without one the
-tests skip rather than fail. Point `GRAYLOG_API_URI`, `GRAYLOG_USERNAME` and `GRAYLOG_PASSWORD` at
-another instance to use that instead of the compose file's.
+Bug reports and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for how to build
+the solution, run the tests (including the Graylog integration suite and the Native AOT run) and open
+a pull request, and the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Credits
 
