@@ -118,6 +118,25 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
             Assert.Equal("first", field.GetValue<string>());
         }
 
+        [Fact]
+        public void Build_DictionaryWhoseNameCollidesWithAnEarlierField_IsIgnored()
+        {
+            DictionaryValue dictionary = new([
+                new KeyValuePair<ScalarValue, LogEventPropertyValue>(
+                    new ScalarValue("key"), new ScalarValue("dictionary-value"))
+            ]);
+            StructureValue value = new([
+                new LogEventProperty("a b", new ScalarValue("first")),
+                new LogEventProperty("a/b", dictionary)
+            ]);
+
+            JsonObject actual = Build("Bag", value);
+            JsonNode? field = actual["_Bag.a_b"];
+
+            Assert.NotNull(field);
+            Assert.Equal("first", field.GetValue<string>());
+        }
+
         /// <summary>
         /// A name that already carries the prefix is left alone rather than gaining a second one.
         /// </summary>

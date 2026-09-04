@@ -83,7 +83,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
         private void Grow(int sizeHint)
         {
             int required = _written + sizeHint;
-            int doubled = _buffer.Length > int.MaxValue / 2 ? int.MaxValue : _buffer.Length * 2;
+            int doubled = (int)Math.Min((long)_buffer.Length * 2, int.MaxValue);
             var grown = new byte[required > doubled ? required : doubled];
 
             _buffer.AsSpan(0, _written).CopyTo(grown);
