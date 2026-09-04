@@ -21,5 +21,5 @@ public interface IDataToChunkConverter
     /// common case - one datagram - costs neither a list nor a copy.
     /// </remarks>
     /// <exception cref="ArgumentException">The payload needs more chunks than GELF allows.</exception>
-    IList<byte[]> ConvertToChunks(ReadOnlyMemory<byte> message);
+    IReadOnlyList<byte[]> ConvertToChunks(ReadOnlyMemory<byte> message);
 }

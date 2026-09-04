@@ -32,20 +32,18 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
         /// </summary>
         /// <param name="message">The GELF payload, as UTF-8.</param>
         /// <exception cref="ArgumentException">message was too long</exception>
-        public async Task Send(ReadOnlyMemory<byte> message)
+        public Task Send(ReadOnlyMemory<byte> message)
         {
             if (_options.Compression != UdpCompression.Gzip)
             {
-                await SendDatagrams(message).ConfigureAwait(false);
-
-                return;
+                return SendDatagrams(message);
             }
 
             var compressed = new ByteBufferWriter(message.Length);
 
             GzipCompressor.Compress(message, compressed);
 
-            await SendDatagrams(compressed.WrittenMemory).ConfigureAwait(false);
+            return SendDatagrams(compressed.WrittenMemory);
         }
 
         /// <summary>
@@ -70,11 +68,11 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
                 return;
             }
 
-            IList<byte[]> chunks = _chunkConverter.ConvertToChunks(payload);
+            IReadOnlyList<byte[]> chunks = _chunkConverter.ConvertToChunks(payload);
 
-            foreach (byte[] chunk in chunks)
+            for (int i = 0; i < chunks.Count; i++)
             {
-                await _transportClient.Send(chunk).ConfigureAwait(false);
+                await _transportClient.Send(chunks[i]).ConfigureAwait(false);
             }
         }
 
@@ -82,7 +80,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
         /// <remarks>The transport owns its client, so the socket is released with it.</remarks>
         public void Dispose()
         {
-            _transportClient?.Dispose();
+            _transportClient.Dispose();
         }
     }
 }

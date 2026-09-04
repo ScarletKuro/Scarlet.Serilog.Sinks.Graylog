@@ -9,13 +9,6 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 public interface IDnsInfoProvider
 {
     /// <summary>
-    /// Gets the host addresses.
-    /// </summary>
-    /// <param name="hostNameOrAddress">The host name or address.</param>
-    /// <returns>Every address the name resolves to.</returns>
-    Task<IPAddress[]> GetHostAddresses(string hostNameOrAddress);
-
-    /// <summary>
     /// Gets the single address a transport should connect to.
     /// </summary>
     /// <param name="hostNameOrAddress">The host name or address.</param>

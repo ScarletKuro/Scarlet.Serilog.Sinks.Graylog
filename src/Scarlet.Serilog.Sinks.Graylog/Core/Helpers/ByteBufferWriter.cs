@@ -86,7 +86,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
             int doubled = _buffer.Length > int.MaxValue / 2 ? int.MaxValue : _buffer.Length * 2;
             var grown = new byte[required > doubled ? required : doubled];
 
-            new ReadOnlySpan<byte>(_buffer, 0, _written).CopyTo(grown);
+            _buffer.AsSpan(0, _written).CopyTo(grown);
 
             _buffer = grown;
         }

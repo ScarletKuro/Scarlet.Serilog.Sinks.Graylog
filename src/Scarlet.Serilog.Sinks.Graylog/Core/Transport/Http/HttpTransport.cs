@@ -29,7 +29,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
         /// <remarks>The transport owns its client, so the client is disposed with it.</remarks>
         public void Dispose()
         {
-            _transportClient?.Dispose();
+            _transportClient.Dispose();
         }
     }
 }

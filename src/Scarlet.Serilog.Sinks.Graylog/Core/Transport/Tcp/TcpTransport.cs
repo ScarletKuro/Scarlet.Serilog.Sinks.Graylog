@@ -41,7 +41,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
         /// <remarks>The transport owns its client, so the connection is closed with it.</remarks>
         public void Dispose()
         {
-            _tcpClient?.Dispose();
+            _tcpClient.Dispose();
         }
     }
 }

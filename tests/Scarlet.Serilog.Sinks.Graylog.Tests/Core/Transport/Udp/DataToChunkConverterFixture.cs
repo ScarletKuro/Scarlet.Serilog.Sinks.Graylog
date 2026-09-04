@@ -44,7 +44,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
         {
             var target = new DataToChunkConverter(_settings, StubGenerator());
 
-            IList<byte[]> actual = target.ConvertToChunks(new byte[payloadLength]);
+            IReadOnlyList<byte[]> actual = target.ConvertToChunks(new byte[payloadLength]);
 
             Assert.Equal(expectedChunks, actual.Count);
             // No chunk may be header-only: an empty chunk is a wasted datagram Graylog still waits for.
@@ -75,7 +75,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
             var target = new DataToChunkConverter(_settings, _messageIdGenerator);
 
             byte[] data = _fixture.CreateMany<byte>(1000).ToArray();
-            IList<byte[]> actual = target.ConvertToChunks(data);
+            IReadOnlyList<byte[]> actual = target.ConvertToChunks(data);
 
             var expected = new List<byte[]>
             {
