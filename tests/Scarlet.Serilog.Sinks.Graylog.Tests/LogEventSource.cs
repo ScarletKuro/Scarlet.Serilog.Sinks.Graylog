@@ -116,7 +116,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
                     throw caught == null
                         ? new InvalidOperationException($"Level {level} exception")
                         : new InvalidOperationException($"Level {level} exception", caught);
-                } catch (Exception thrown)
+                }
+                catch (Exception thrown)
                 {
                     caught = thrown;
                 }

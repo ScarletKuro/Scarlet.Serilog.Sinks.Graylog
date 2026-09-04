@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Threading.Tasks;
 
 namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport

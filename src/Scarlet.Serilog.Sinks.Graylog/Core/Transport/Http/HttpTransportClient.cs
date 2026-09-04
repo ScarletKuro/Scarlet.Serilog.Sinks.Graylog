@@ -18,8 +18,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
     /// so changes to the options stop taking effect once a message has been sent. Override
     /// <see cref="CreateHttpClient"/> or <see cref="ConfigureHttpClient"/> to take over either half.
     /// </remarks>
-    /// <seealso cref="ITransportClient{T}" />
-    public class HttpTransportClient : ITransportClient<string>
+    /// <seealso cref="ITransportClient" />
+    public class HttpTransportClient : ITransportClient
     {
         private const string DefaultHttpUriPath = "gelf";
 
@@ -245,11 +245,21 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
 
         /// <inheritdoc />
         /// <exception cref="HttpRequestException">Graylog answered with a non-success status code.</exception>
-        public async Task Send(string message)
+        public async Task Send(ReadOnlyMemory<byte> message)
         {
             HttpClient httpClient = _httpClient.Value;
 
-            using var content = new StringContent(message, Encoding.UTF8, "application/json");
+            // The payload is already UTF-8, so it is posted as bytes over the buffer the sink filled.
+            // StringContent would have transcoded a string the sink had transcoded from UTF-8 in the
+            // first place, and allocated the whole message again to do it.
+            ArraySegment<byte> segment = Helpers.PooledByteBuffer.AsArraySegment(message);
+
+            using var content = new ByteArrayContent(segment.Array!, segment.Offset, segment.Count);
+
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/json")
+            {
+                CharSet = Encoding.UTF8.WebName
+            };
 
             // The response is buffered by the time PostAsync returns, so the connection is already back
             // in the pool - but the response still holds the buffered content, and leaving it to the
@@ -260,7 +270,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
             if (result.StatusCode == HttpStatusCode.RequestEntityTooLarge)
             {
                 throw new HttpRequestException(
-                    $"Graylog rejected a {Encoding.UTF8.GetByteCount(message)}-byte GELF message as too large. "
+                    $"Graylog rejected a {message.Length}-byte GELF message as too large. "
                     + "The HTTP input caps the decompressed message at its 'max_chunk_size', 65536 bytes by default, "
                     + "and GELF defines no chunking over HTTP - raise that setting on the input, shorten the event, "
                     + "or use the UDP or TCP transport, which do split large messages.");

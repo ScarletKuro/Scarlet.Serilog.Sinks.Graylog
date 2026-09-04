@@ -58,8 +58,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
         public void Build_PropertyNamedId_IsRenamed(string propertyName)
         {
             JsonObject actual = Build(propertyName, new ScalarValue(42));
+            JsonNode? renamedField = actual[$"_{propertyName}_"];
 
-            Assert.Equal(42, actual[$"_{propertyName}_"]!.GetValue<int>());
+            Assert.NotNull(renamedField);
+            Assert.Equal(42, renamedField.GetValue<int>());
             Assert.False(actual.ContainsKey($"_{propertyName}"));
         }
 
@@ -77,19 +79,32 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
             ]);
 
             JsonObject actual = Build("Bag", value, parseArrayValues: true);
+            JsonNode? spaceField = actual["_Bag.my_key"];
+            JsonNode? slashField = actual["_Bag.a_b"];
+            JsonNode? unchangedField = actual["_Bag.kept.name-1"];
 
-            Assert.Equal("one", actual["_Bag.my_key"]!.GetValue<string>());
-            Assert.Equal("two", actual["_Bag.a_b"]!.GetValue<string>());
+            Assert.NotNull(spaceField);
+            Assert.Equal("one", spaceField.GetValue<string>());
+            Assert.NotNull(slashField);
+            Assert.Equal("two", slashField.GetValue<string>());
             // Word characters, dots and dashes are legal and must survive untouched.
-            Assert.Equal("three", actual["_Bag.kept.name-1"]!.GetValue<string>());
+            Assert.NotNull(unchangedField);
+            Assert.Equal("three", unchangedField.GetValue<string>());
         }
 
         /// <summary>
-        /// Two names that sanitize to the same field must not take the event down with them:
-        /// <c>JsonObject.Add</c> throws on a duplicate key, so the write has to be last-wins.
+        /// Two names that sanitize to the same field must not take the event down with them, and must
+        /// not put the same key in the payload twice. The first one written is the one that survives.
         /// </summary>
+        /// <remarks>
+        /// This used to be last-wins, because the payload was assembled as a <c>JsonObject</c> whose
+        /// indexer replaced the earlier value. The payload is now written straight out, and a writer
+        /// cannot go back and replace a field it has already emitted - so the later value is dropped
+        /// instead of the earlier one. Which of the two survives was arbitrary either way; what the
+        /// sink owes the caller is a well-formed message and a live event.
+        /// </remarks>
         [Fact]
-        public void Build_NamesThatCollideAfterSanitizing_DoNotThrow()
+        public void Build_NamesThatCollideAfterSanitizing_KeepTheFirstAndDoNotThrow()
         {
             DictionaryValue value = new([
                 new KeyValuePair<ScalarValue, LogEventPropertyValue>(new ScalarValue("a b"), new ScalarValue("first")),
@@ -97,8 +112,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
             ]);
 
             JsonObject actual = Build("Bag", value, parseArrayValues: true);
+            JsonNode? field = actual["_Bag.a_b"];
 
-            Assert.Equal("second", actual["_Bag.a_b"]!.GetValue<string>());
+            Assert.NotNull(field);
+            Assert.Equal("first", field.GetValue<string>());
         }
 
         /// <summary>
@@ -180,9 +197,11 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
         public void Build_BooleanScalar_IsWrittenAsText(bool given, string expected)
         {
             JsonObject actual = Build("Flag", new ScalarValue(given));
+            JsonNode? field = actual["_Flag"];
 
-            Assert.Equal(JsonValueKind.String, actual["_Flag"]!.GetValueKind());
-            Assert.Equal(expected, actual["_Flag"]!.GetValue<string>());
+            Assert.NotNull(field);
+            Assert.Equal(JsonValueKind.String, field.GetValueKind());
+            Assert.Equal(expected, field.GetValue<string>());
         }
 
         private static JsonObject Build(string propertyName, LogEventPropertyValue value, bool parseArrayValues = false)

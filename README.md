@@ -238,7 +238,7 @@ the sink appends an underscore to those: `message`, `source`, `timestamp`, `leve
 A property called `message` therefore arrives as `message_`. Graylog compares those names
 case-sensitively, so the PascalCase spellings Serilog properties usually carry — `Message`, `Source`,
 `Timestamp` — are left exactly as they are. Two names that end up identical after all this are
-written last-wins.
+not safe to emit twice: the first value is kept, and later colliding values are ignored.
 
 **Booleans are written as the strings `"true"` and `"false"`.** Graylog drops boolean additional
 fields, so a `bool` property would otherwise vanish from the message. As text it survives and stays
@@ -259,6 +259,17 @@ survives:
 
 If events can be large, prefer TCP or UDP over HTTP, and keep individual property values well under
 32 KB.
+
+### Payload buffers
+
+Each event's GELF payload is written into a byte array rented from `ArrayPool<byte>.Shared` and
+returned without being cleared once the send finishes. This is the pool's normal behavior, but code
+elsewhere in the same process that rents from the shared pool may observe bytes left by an earlier
+log event.
+
+A custom `ITransport` must be finished with the payload when its task completes — in any terminal
+state, including faulted or cancelled. The next event may reuse the buffer immediately; copy the
+payload if it is needed for longer.
 
 ## Batching
 
@@ -286,6 +297,12 @@ Without batching, an event is sent as it is emitted, but `Emit` does not wait fo
 the logger waits for whatever is still in flight, for up to `Delivery.ShutdownTimeout` (10 seconds by
 default; `null` opts out of waiting). On `net8.0` and later the sink also implements
 `IAsyncDisposable`, so `await Log.CloseAndFlushAsync()` drains it without blocking a thread.
+
+**Nothing bounds how many of those unbatched sends can be outstanding.** Each transport sends one
+event at a time, so an unreachable or slow Graylog means the sends — and the payload buffer each one
+is holding — pile up for as long as events keep arriving, with no queue limit and no back-pressure.
+Batching is what puts a ceiling on it: past `QueueLimit` events are dropped instead of accumulating.
+Prefer batching for anything high-volume.
 
 In `appsettings.json` (note that `TimeSpan` values use `TimeSpan.Parse` format, so `"00:00:05"`, not `"5s"`):
 
@@ -334,9 +351,12 @@ is verified end to end rather than only by analyzers.
 
 ### Customizing how values are written
 
-`GraylogSinkOptions.Message.JsonSerializerOptions` is the hook, and under AOT the customization has to arrive
-through a **`TypeInfoResolver`** — that is, a source-generated `JsonSerializerContext`. Declare the
-types whose serialization you want to control:
+`GraylogSinkOptions.Message.JsonSerializerOptions` is the hook. The sink takes a defensive copy when
+it is constructed, so configure the options first; later changes do not affect the sink, and
+serialization does not make the caller's instance read-only.
+
+Under AOT the customization has to arrive through a **`TypeInfoResolver`** — that is, a
+source-generated `JsonSerializerContext`. Declare the types whose serialization you want to control:
 
 ```csharp
 [JsonSourceGenerationOptions(UseStringEnumConverter = true)]
@@ -369,12 +389,19 @@ customization through the context above. If you do add converters, use the gener
 `JsonStringEnumConverter<TEnum>`; the non-generic `JsonStringEnumConverter` is itself annotated
 `RequiresDynamicCode`.
 
-Two defaults worth knowing:
+Three defaults worth knowing:
 
 - **Enums are written as numbers**, which is what `System.Text.Json` does by default. Use
   `UseStringEnumConverter` on the context, as above, for names.
-- A `DateTimeOffset`, or a `DateTime` with `DateTimeKind.Local`, may write the `+` in its UTC offset
-  literally rather than as a JSON unicode escape. Different bytes, same string, same instant.
+- A `DateTimeOffset`, or a `DateTime` with `DateTimeKind.Local`, writes the `+` in its UTC offset
+  literally rather than as a JSON unicode escape. Same string, same instant, fewer bytes.
+- **Booleans are written as the strings `"true"` and `"false"`**, because Graylog discards a boolean
+  additional field outright — losing the field is worse than changing its type. A custom
+  `JsonConverter<bool>` does not override this.
+
+Scalar values are written directly into the payload through their `System.Text.Json` contracts.
+Converters, number handling, resolver modifiers and source-generated contexts therefore keep their
+normal precedence without an additional sink-specific fast path.
 
 `nint`, `nuint`, and a `Type` or `MemberInfo` captured with `{@Property}` are written as well; plain
 `System.Text.Json` rejects all four.

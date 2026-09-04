@@ -2,6 +2,7 @@ using Serilog.Core;
 using Serilog.Debugging;
 using Serilog.Events;
 using Scarlet.Serilog.Sinks.Graylog.Core;
+using Scarlet.Serilog.Sinks.Graylog.Core.Helpers;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 using System;
 using System.Collections.Concurrent;
@@ -36,10 +37,13 @@ namespace Scarlet.Serilog.Sinks.Graylog
         , IAsyncDisposable
 #endif
     {
+        private const int DefaultJsonSerializerMaxDepth = 64;
+
         private readonly Lazy<IGelfConverter> _converter;
         private readonly Lazy<ITransport> _transport;
-        private readonly JsonSerializerOptions _options;
         private readonly TimeSpan? _shutdownTimeout;
+
+        private readonly JsonWriterOptions _writerOptions;
 
         /// <summary>
         /// Sends started by <see cref="Emit"/> that have not finished yet, so disposal can wait for
@@ -58,7 +62,7 @@ namespace Scarlet.Serilog.Sinks.Graylog
         /// <summary>
         /// Initializes a new instance of the <see cref="GraylogSink"/> class.
         /// </summary>
-        /// <param name="options">The sink options. A copy of <see cref="GelfOptions.JsonSerializerOptions"/> is taken here; the transport and converter are built on first use.</param>
+        /// <param name="options">The sink options. A copy of <see cref="GelfOptions.JsonSerializerOptions"/> is captured here; the transport and converter are built on first use.</param>
         /// <exception cref="ArgumentNullException"><paramref name="options"/> is <c>null</c>.</exception>
         public GraylogSink(GraylogSinkOptions options)
         {
@@ -69,10 +73,9 @@ namespace Scarlet.Serilog.Sinks.Graylog
 
             GraylogSinkOptionsValidator.Validate(options);
 
-            ISinkComponentsBuilder sinkComponentsBuilder = new SinkComponentsBuilder(options);
+            var sinkComponentsBuilder = new SinkComponentsBuilder(options);
 
-            var jsonSerializerOptions = options.Message.JsonSerializerOptions;
-            _options = new JsonSerializerOptions(jsonSerializerOptions);
+            _writerOptions = CreateWriterOptions(sinkComponentsBuilder.JsonSerializerOptions);
 
             _shutdownTimeout = options.Delivery.ShutdownTimeout;
             _transport = new Lazy<ITransport>(sinkComponentsBuilder.MakeTransport);
@@ -183,12 +186,91 @@ namespace Scarlet.Serilog.Sinks.Graylog
             return Task.CompletedTask;
         }
 
+        /// <summary>
+        /// Writes the GELF payload for an event and starts its send.
+        /// </summary>
+        /// <remarks>
+        /// The payload buffer belongs to the sink and is handed back to the pool once the send has
+        /// finished with it - not when this method returns, since <see cref="Emit"/> does not wait for
+        /// the send. That is also why <see cref="ITransport.Send"/> documents the memory as valid only
+        /// until its task completes: a transport that squirrels the payload away would find it
+        /// overwritten by the next event. That holds for a send that failed as much as one that
+        /// succeeded - a task in any terminal state means the transport is done with the memory, which
+        /// is the contract every <c>Memory&lt;T&gt;</c>-taking asynchronous API works to - so the buffer
+        /// goes back to the pool either way rather than being thrown away on the failure path.
+        /// </remarks>
         private Task SendAsync(LogEvent logEvent)
         {
-            var json = _converter.Value.GetGelfJson(logEvent);
-            var payload = json.ToJsonString(_options);
+            var payload = new PooledByteBuffer();
 
-            return _transport.Value.Send(payload);
+            try
+            {
+                // A block rather than a using declaration on purpose: the writer has to be flushed and
+                // done with the buffer before the send starts, not at the end of this method.
+                using (var writer = new Utf8JsonWriter(payload, _writerOptions))
+                {
+                    _converter.Value.WriteGelfJson(logEvent, writer);
+                    writer.Flush();
+                }
+
+                Task send = _transport.Value.Send(payload.WrittenMemory);
+
+                if (send.IsCompleted)
+                {
+                    payload.Dispose();
+
+                    return send;
+                }
+
+                return ReleaseWhenSent(send, payload);
+            }
+            catch
+            {
+                payload.Dispose();
+
+                throw;
+            }
+        }
+
+        private static async Task ReleaseWhenSent(Task send, PooledByteBuffer payload)
+        {
+            try
+            {
+                await send.ConfigureAwait(false);
+            }
+            finally
+            {
+                payload.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// Derives the writer configuration from the serializer options the payload options carry.
+        /// </summary>
+        /// <remarks>
+        /// Settings that have a corresponding <see cref="JsonWriterOptions"/> property are carried
+        /// across so direct writing preserves the behavior of serializing with the configured
+        /// <see cref="JsonSerializerOptions"/>. Validation is deliberately left on - it costs a few
+        /// nanoseconds of bookkeeping per event and is what turns a custom <see cref="IGelfConverter"/>
+        /// that writes unbalanced JSON into an exception rather than a payload Graylog silently
+        /// rejects.
+        /// </remarks>
+        private static JsonWriterOptions CreateWriterOptions(JsonSerializerOptions serializerOptions)
+        {
+            return new JsonWriterOptions
+            {
+                Encoder = serializerOptions.Encoder,
+                Indented = serializerOptions.WriteIndented,
+                // Zero means 64 to JsonSerializerOptions but 1000 to JsonWriterOptions.
+                MaxDepth = serializerOptions.MaxDepth == 0
+                    ? DefaultJsonSerializerMaxDepth
+                    : serializerOptions.MaxDepth,
+#if NET9_0_OR_GREATER
+                IndentCharacter = serializerOptions.IndentCharacter,
+                IndentSize = serializerOptions.IndentSize,
+                NewLine = serializerOptions.NewLine
+#endif
+            };
         }
 
         /// <inheritdoc />
@@ -211,7 +293,8 @@ namespace Scarlet.Serilog.Sinks.Graylog
                     // Safe to block: every await in the send path uses ConfigureAwait(false), so no
                     // continuation is waiting on the caller's synchronization context.
                     Task.WaitAll(pending, timeout);
-                } catch (AggregateException)
+                }
+                catch (AggregateException)
                 {
                     // Each send already reported itself to SelfLog through its own continuation.
                 }

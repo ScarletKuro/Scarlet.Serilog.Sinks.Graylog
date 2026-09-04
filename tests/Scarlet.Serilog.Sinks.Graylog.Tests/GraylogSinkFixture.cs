@@ -1,10 +1,14 @@
 using Scarlet.Serilog.Sinks.Graylog.Tests.Fakes;
 using Serilog;
 using Serilog.Debugging;
+using Serilog.Events;
+using Scarlet.Serilog.Sinks.Graylog.Core;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -18,6 +22,101 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
     [Collection(SelfLogCollection.Name)]
     public class GraylogSinkFixture
     {
+        [Fact]
+        public void Emit_KeepsEachPayloadAliveUntilItsSendCompletes()
+        {
+            var transport = new DeferredReadingTransport();
+            var options = new GraylogSinkOptions
+            {
+                TransportType = TransportType.Custom,
+                Custom = new CustomTransportOptions { Factory = () => transport }
+            };
+            var sink = new GraylogSink(options);
+
+            sink.Emit(LogEventSource.GetScalarEvent("Value", "first"));
+            sink.Emit(LogEventSource.GetScalarEvent("Value", "second"));
+
+            Assert.Equal("first", ReadValue(transport.Payloads[0]));
+            Assert.Equal("second", ReadValue(transport.Payloads[1]));
+
+            transport.CompleteAll();
+            sink.Dispose();
+        }
+
+        [Fact]
+        public void Constructor_SnapshotsSerializerOptionsBeforeTheLazyBuildersAreCreated()
+        {
+            var serializerOptions = new JsonSerializerOptions();
+            using var transport = new RecordingTransport();
+            GraylogSinkOptions options = transport.SinkOptions(
+                sinkOptions => sinkOptions.Message.JsonSerializerOptions = serializerOptions);
+            using var sink = new GraylogSink(options);
+
+            // This remains legal because the sink copied the caller's instance, but it must not alter
+            // scalar serialization after construction just because the builder is created lazily.
+            serializerOptions.Converters.Add(new UpperCaseStringConverter());
+
+            sink.Emit(LogEventSource.GetScalarEvent("Value", "first"));
+
+            using JsonDocument payload = JsonDocument.Parse(transport.Payloads[0]);
+            Assert.Equal("first", payload.RootElement.GetProperty("_Value").GetString());
+
+            serializerOptions.WriteIndented = true;
+            Assert.True(serializerOptions.WriteIndented);
+        }
+
+        [Fact]
+        public void Emit_HonoursJsonSerializerOptionsMaxDepth()
+        {
+            using var transport = new RecordingTransport();
+            GraylogSinkOptions options = transport.SinkOptions(sinkOptions =>
+            {
+                sinkOptions.Message.JsonSerializerOptions = new JsonSerializerOptions { MaxDepth = 1 };
+                sinkOptions.Message.Converter = new NestedObjectGelfConverter();
+            });
+            using var sink = new GraylogSink(options);
+
+            Assert.Throws<InvalidOperationException>(
+                () => sink.Emit(LogEventSource.GetSimpleLogEvent(DateTimeOffset.UnixEpoch)));
+            Assert.Empty(transport.Payloads);
+        }
+
+        [Fact]
+        public void Emit_HonoursJsonSerializerOptionsDefaultMaxDepth()
+        {
+            using var transport = new RecordingTransport();
+            GraylogSinkOptions options = transport.SinkOptions(
+                sinkOptions => sinkOptions.Message.Converter = new NestedObjectGelfConverter(64));
+            using var sink = new GraylogSink(options);
+
+            Assert.Throws<InvalidOperationException>(
+                () => sink.Emit(LogEventSource.GetSimpleLogEvent(DateTimeOffset.UnixEpoch)));
+            Assert.Empty(transport.Payloads);
+        }
+
+#if NET9_0_OR_GREATER
+        [Fact]
+        public void Emit_HonoursJsonSerializerOptionsIndentationSettings()
+        {
+            var serializerOptions = new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                IndentCharacter = '\t',
+                IndentSize = 1,
+                NewLine = "\r\n"
+            };
+            using var transport = new RecordingTransport();
+            using var sink = new GraylogSink(transport.SinkOptions(
+                options => options.Message.JsonSerializerOptions = serializerOptions));
+
+            sink.Emit(LogEventSource.GetSimpleLogEvent(DateTimeOffset.UnixEpoch));
+
+            string payload = Assert.Single(transport.Payloads);
+            Assert.Contains("\r\n\t\"version\"", payload);
+            Assert.DoesNotContain("\n  \"version\"", payload);
+        }
+#endif
+
         /// <summary>
         /// Emit must never wait on the send. Blocking deadlocks a caller whose synchronization context
         /// is single-threaded, because the continuation needs the thread that is blocked.
@@ -94,7 +193,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
                 sink.Dispose();
 
                 Assert.Equal(1, Volatile.Read(ref reported));
-            } finally
+            }
+            finally
             {
                 SelfLog.Disable();
             }
@@ -253,7 +353,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
 
                 Assert.Same(reported.Task, completed);
                 Assert.Contains("Could not send a log event to Graylog", await reported.Task);
-            } finally
+            }
+            finally
             {
                 SelfLog.Disable();
             }
@@ -324,7 +425,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
                 sink.Emit(LogEventSource.GetSimpleLogEvent(DateTimeOffset.UnixEpoch));
 
                 sink.Dispose();
-            } finally
+            }
+            finally
             {
                 SelfLog.Disable();
             }
@@ -399,7 +501,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             try
             {
                 sink.Emit(LogEventSource.GetSimpleLogEvent(DateTimeOffset.UnixEpoch));
-            } finally
+            }
+            finally
             {
                 SelfLog.Disable();
             }
@@ -419,6 +522,85 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
 
             public override void Send(SendOrPostCallback d, object? state)
             {
+            }
+        }
+
+        private static string ReadValue(ReadOnlyMemory<byte> payload)
+        {
+            using JsonDocument document = JsonDocument.Parse(payload);
+            string? value = document.RootElement.GetProperty("_Value").GetString();
+
+            Assert.NotNull(value);
+
+            return value;
+        }
+
+        private sealed class DeferredReadingTransport : ITransport
+        {
+            private readonly List<TaskCompletionSource<bool>> _pending = new();
+
+            public List<ReadOnlyMemory<byte>> Payloads { get; } = new();
+
+            public Task Send(ReadOnlyMemory<byte> message)
+            {
+                Payloads.Add(message);
+
+                var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                _pending.Add(completion);
+
+                return completion.Task;
+            }
+
+            public void CompleteAll()
+            {
+                foreach (TaskCompletionSource<bool> completion in _pending)
+                {
+                    completion.SetResult(true);
+                }
+            }
+
+            public void Dispose()
+            {
+            }
+        }
+
+        private sealed class UpperCaseStringConverter : JsonConverter<string>
+        {
+            public override string? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            {
+                return reader.GetString();
+            }
+
+            public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
+            {
+                writer.WriteStringValue(value.ToUpperInvariant());
+            }
+        }
+
+        private sealed class NestedObjectGelfConverter : IGelfConverter
+        {
+            private readonly int _nestedDepth;
+
+            public NestedObjectGelfConverter(int nestedDepth = 1)
+            {
+                _nestedDepth = nestedDepth;
+            }
+
+            public void WriteGelfJson(LogEvent logEvent, Utf8JsonWriter writer)
+            {
+                writer.WriteStartObject();
+
+                for (int i = 0; i < _nestedDepth; i++)
+                {
+                    writer.WriteStartObject("nested");
+                }
+
+                for (int i = 0; i < _nestedDepth; i++)
+                {
+                    writer.WriteEndObject();
+                }
+
+                writer.WriteEndObject();
             }
         }
     }

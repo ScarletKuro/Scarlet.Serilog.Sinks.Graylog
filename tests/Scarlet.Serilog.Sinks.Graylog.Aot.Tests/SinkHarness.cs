@@ -3,6 +3,7 @@ using Serilog.Events;
 using Serilog.Parsing;
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 
@@ -68,9 +69,13 @@ namespace Scarlet.Serilog.Sinks.Graylog.Aot.Tests
     {
         public List<string> Payloads { get; } = new List<string>();
 
-        public Task Send(string message)
+        /// <remarks>
+        /// Decoded on the spot: the sink returns its pooled payload buffer once this task completes,
+        /// so holding the memory would mean reading whatever the next event wrote there.
+        /// </remarks>
+        public Task Send(ReadOnlyMemory<byte> payload)
         {
-            Payloads.Add(message);
+            Payloads.Add(Encoding.UTF8.GetString(payload.ToArray()));
 
             return Task.CompletedTask;
         }

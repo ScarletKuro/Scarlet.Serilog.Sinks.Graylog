@@ -1,3 +1,5 @@
+using System;
+
 namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers;
 
 /// <summary>
@@ -10,5 +12,5 @@ public interface IMessageIdGenerator
     /// </summary>
     /// <param name="message">The complete GELF payload the chunks were split from.</param>
     /// <returns>Eight bytes, unique enough that two messages in flight at once do not collide.</returns>
-    byte[] GenerateMessageId(byte[] message);
+    byte[] GenerateMessageId(ReadOnlyMemory<byte> message);
 }

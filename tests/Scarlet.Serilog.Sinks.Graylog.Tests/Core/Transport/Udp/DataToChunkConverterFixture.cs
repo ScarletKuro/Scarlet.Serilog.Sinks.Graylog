@@ -64,7 +64,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
 
         private IMessageIdGenerator StubGenerator()
         {
-            _messageIdGenerator.GenerateMessageId(Arg.Any<byte[]>()).Returns(new byte[8]);
+            _messageIdGenerator.GenerateMessageId(Arg.Any<ReadOnlyMemory<byte>>()).Returns(new byte[8]);
 
             return _messageIdGenerator;
         }

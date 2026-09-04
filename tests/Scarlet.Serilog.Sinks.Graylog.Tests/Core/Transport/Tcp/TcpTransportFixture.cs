@@ -1,6 +1,7 @@
 using NSubstitute;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp;
+using System;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -15,13 +16,13 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Tcp
         [InlineData("Tere, maailm!")]
         public async Task Send_EncodesUtf8AndAppendsANullTerminator(string message)
         {
-            var transportClient = Substitute.For<ITransportClient<byte[]>>();
+            var transportClient = Substitute.For<ITransportClient>();
             var target = new TcpTransport(transportClient);
 
             await target.Send(message);
 
             byte[] expected = Encoding.UTF8.GetBytes(message + "\0");
-            await transportClient.Received(1).Send(Arg.Is<byte[]>((byte[] value) => value.SequenceEqual(expected)));
+            await transportClient.Received(1).Send(Arg.Is<ReadOnlyMemory<byte>>(value => value.ToArray().SequenceEqual(expected)));
         }
 
         /// <summary>
@@ -30,7 +31,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Tcp
         [Fact]
         public void Dispose_DisposesTheTransportClient()
         {
-            var transportClient = Substitute.For<ITransportClient<byte[]>>();
+            var transportClient = Substitute.For<ITransportClient>();
             var target = new TcpTransport(transportClient);
 
             target.Dispose();
@@ -41,7 +42,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Tcp
         [Fact]
         public void Dispose_CalledTwice_DisposesTheTransportClientAgainWithoutFailing()
         {
-            var transportClient = Substitute.For<ITransportClient<byte[]>>();
+            var transportClient = Substitute.For<ITransportClient>();
             var target = new TcpTransport(transportClient);
 
             target.Dispose();

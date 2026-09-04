@@ -20,10 +20,14 @@ public static class LoggerConfigurationGrayLogExtensions
         GraylogSinkOptions options)
     {
         if (loggerSinkConfiguration == null)
+        {
             throw new ArgumentNullException(nameof(loggerSinkConfiguration));
+        }
 
         if (options == null)
+        {
             throw new ArgumentNullException(nameof(options));
+        }
 
         var sink = new GraylogSink(options);
         return options.Delivery.Batching is { } batchingOptions

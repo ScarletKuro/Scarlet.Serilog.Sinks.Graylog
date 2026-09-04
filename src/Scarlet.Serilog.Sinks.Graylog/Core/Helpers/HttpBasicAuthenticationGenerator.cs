@@ -18,7 +18,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
 
         public AuthenticationHeaderValue? Generate()
         {
-            if (!Validate()) return null;
+            if (!Validate())
+            {
+                return null;
+            }
 
             var byteArray = Encoding.ASCII.GetBytes(string.Concat(_usernameInHttp, ":", _passwordInHttp));
 
@@ -27,7 +30,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
 
         private bool Validate()
         {
-            if (_usernameInHttp == null && _passwordInHttp == null) return false;
+            if (_usernameInHttp == null && _passwordInHttp == null)
+            {
+                return false;
+            }
 
             if (_passwordInHttp == null)
             {

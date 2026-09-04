@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Threading.Tasks;
 
 namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
@@ -8,36 +9,66 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
     /// </summary>
     public sealed class TcpTransport : ITransport
     {
-        private readonly ITransportClient<byte[]> _tcpClient;
+        private readonly ITransportClient _tcpClient;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="TcpTransport"/> class.
         /// </summary>
         /// <param name="tcpClient">The transport client that owns the connection.</param>
-        public TcpTransport(ITransportClient<byte[]> tcpClient)
+        public TcpTransport(ITransportClient tcpClient)
         {
             _tcpClient = tcpClient;
         }
 
         /// <inheritdoc />
-        public Task Send(string message)
+        /// <remarks>
+        /// The payload is copied once, into a pooled buffer one byte longer, because GELF over TCP
+        /// terminates each frame with a null and the sink's buffer belongs to the sink. Copying beats
+        /// writing the terminator separately: a second write on the stream is a second syscall per
+        /// event, and it would let a concurrent frame interleave between the two.
+        /// <para>
+        /// On the frameworks without a cancellable stream API the frame is returned to the pool only
+        /// after a send that finished; see the remark inside the method.
+        /// </para>
+        /// </remarks>
+        public async Task Send(ReadOnlyMemory<byte> message)
         {
+            byte[] frame = ArrayPool<byte>.Shared.Rent(message.Length + 1);
+            var payload = new ReadOnlyMemory<byte>(frame, 0, message.Length + 1);
+
+            message.Span.CopyTo(frame);
+            frame[message.Length] = 0x00;
+
 #if NET
-            int byteCount = System.Text.Encoding.UTF8.GetByteCount(message);
-            var payload = new byte[byteCount + 1];
-            System.Text.Encoding.UTF8.GetBytes(message.AsSpan(), payload.AsSpan());
-            payload[^1] = 0x00;
-
-            return _tcpClient.Send(payload);
+            try
+            {
+                await _tcpClient.Send(payload).ConfigureAwait(false);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(frame);
+            }
 #else
-            // Sized once and filled in place. GetBytes followed by Array.Resize allocated the payload
-            // twice and copied all of it, for the sake of one trailing null byte.
-            int byteCount = System.Text.Encoding.UTF8.GetByteCount(message);
-            var payload = new byte[byteCount + 1];
-            System.Text.Encoding.UTF8.GetBytes(message, 0, message.Length, payload, 0);
-            payload[byteCount] = 0x00;
+            try
+            {
+                await _tcpClient.Send(payload).ConfigureAwait(false);
+            }
+            catch (TcpTransportClient.AbandonedTcpWriteException)
+            {
+                // These targets have no cancellable stream API. TcpTransportClient implements its
+                // write timeout by stopping its wait on Stream.WriteAsync, which can still be reading
+                // this frame. Leave that one array to the garbage collector rather than let the next
+                // event rent and overwrite it mid-write. Connect and flush timeouts take the normal
+                // catch below because neither operation reads this buffer.
+                throw;
+            }
+            catch
+            {
+                ArrayPool<byte>.Shared.Return(frame);
+                throw;
+            }
 
-            return _tcpClient.Send(payload);
+            ArrayPool<byte>.Shared.Return(frame);
 #endif
         }
 

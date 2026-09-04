@@ -2,7 +2,7 @@ using Serilog.Events;
 using Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders;
 using System;
 using System.Collections.Generic;
-using System.Text.Json.Nodes;
+using System.Text.Json;
 
 namespace Scarlet.Serilog.Sinks.Graylog.Core
 {
@@ -30,13 +30,13 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core
         /// An event carrying an exception goes to the <see cref="BuilderType.Exception"/> builder, and
         /// everything else to the <see cref="BuilderType.Message"/> one.
         /// </remarks>
-        public JsonObject GetGelfJson(LogEvent logEvent)
+        public void WriteGelfJson(LogEvent logEvent, Utf8JsonWriter writer)
         {
             IMessageBuilder builder = logEvent.Exception != null
                 ? _messageBuilders[BuilderType.Exception].Value
                 : _messageBuilders[BuilderType.Message].Value;
 
-            return builder.Build(logEvent);
+            builder.Build(logEvent, writer);
         }
     }
 }

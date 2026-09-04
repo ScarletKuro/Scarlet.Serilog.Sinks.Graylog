@@ -15,20 +15,19 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
         /// </summary>
         /// <param name="settings">The settings.</param>
         /// <param name="messageIdGenerator">Produces the identifier the chunks of one message share.</param>
-        public DataToChunkConverter(ChunkSettings settings,
-                                    IMessageIdGenerator messageIdGenerator)
+        public DataToChunkConverter(ChunkSettings settings, IMessageIdGenerator messageIdGenerator)
         {
             _settings = settings;
             _messageIdGenerator = messageIdGenerator;
         }
 
         /// <inheritdoc />
-        public IList<byte[]> ConvertToChunks(byte[] message)
+        public IList<byte[]> ConvertToChunks(ReadOnlyMemory<byte> message)
         {
             int messageLength = message.Length;
             if (messageLength <= _settings.MaxMessageSizeInUdp)
             {
-                return new List<byte[]>(1) { message };
+                return new List<byte[]>(1) { message.ToArray() };
             }
 
             int maxChunkPayload = _settings.MaxMessageSizeInChunk;
@@ -39,6 +38,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
             }
 
             byte[] messageId = _messageIdGenerator.GenerateMessageId(message);
+            ReadOnlySpan<byte> payload = message.Span;
 
             var result = new List<byte[]>(chunksCount);
             for (byte i = 0; i < chunksCount; i++)
@@ -56,7 +56,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
                 Buffer.BlockCopy(messageId, 0, chunk, 2, ChunkSettings.MessageIdSize);
                 chunk[ChunkSettings.PrefixSize - 2] = i;
                 chunk[ChunkSettings.PrefixSize - 1] = (byte)chunksCount;
-                Buffer.BlockCopy(message, offset, chunk, ChunkSettings.PrefixSize, length);
+                payload.Slice(offset, length).CopyTo(new Span<byte>(chunk, ChunkSettings.PrefixSize, length));
 
                 result.Add(chunk);
             }

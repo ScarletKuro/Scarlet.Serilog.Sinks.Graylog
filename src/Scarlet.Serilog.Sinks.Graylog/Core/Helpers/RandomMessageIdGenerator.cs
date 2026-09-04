@@ -1,3 +1,5 @@
+using System;
+
 namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers;
 
 /// <summary>
@@ -7,7 +9,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers;
 internal sealed class RandomMessageIdGenerator : IMessageIdGenerator
 {
     /// <inheritdoc />
-    public byte[] GenerateMessageId(byte[] message)
+    public byte[] GenerateMessageId(ReadOnlyMemory<byte> message)
     {
         return SecureRandom.NextBytes(8);
     }

@@ -78,7 +78,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Tcp
                 await accepting;
 
                 Assert.Equal(1, Volatile.Read(ref reported));
-            } finally
+            }
+            finally
             {
                 SelfLog.Disable();
             }
@@ -241,7 +242,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Tcp
             try
             {
                 await task;
-            } catch (Exception)
+            }
+            catch (Exception)
             {
                 // The test broke this connection on purpose.
             }

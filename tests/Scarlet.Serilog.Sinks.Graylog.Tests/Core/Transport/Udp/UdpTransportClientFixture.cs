@@ -61,7 +61,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
 
                 Assert.Equal("The Graylog endpoint could not be resolved.", exception.Message);
                 Assert.Equal(1, Volatile.Read(ref reported));
-            } finally
+            }
+            finally
             {
                 SelfLog.Disable();
             }

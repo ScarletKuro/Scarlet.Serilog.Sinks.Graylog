@@ -92,7 +92,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Fakes
                 try
                 {
                     _accepted[index].Dispose();
-                } catch (Exception)
+                }
+                catch (Exception)
                 {
                     // Tearing down a connection the test may already have broken on purpose.
                 }

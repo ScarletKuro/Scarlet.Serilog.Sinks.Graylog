@@ -6,13 +6,16 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport
     /// <summary>
     /// The Transport client interface
     /// </summary>
-    /// <typeparam name="T"></typeparam>
-    public interface ITransportClient<in T> : IDisposable
+    public interface ITransportClient : IDisposable
     {
         /// <summary>
         /// Sends the specified payload.
         /// </summary>
-        /// <param name="payload">The payload.</param>
-        Task Send(T payload);
+        /// <param name="payload">The bytes to put on the wire.</param>
+        /// <remarks>
+        /// <paramref name="payload"/> is only valid until the returned task completes; see
+        /// <see cref="ITransport.Send"/>.
+        /// </remarks>
+        Task Send(ReadOnlyMemory<byte> payload);
     }
 }

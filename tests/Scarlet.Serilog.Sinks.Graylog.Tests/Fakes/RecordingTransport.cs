@@ -1,6 +1,7 @@
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -49,8 +50,18 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Fakes
             return options;
         }
 
-        public async Task Send(string message)
+        /// <summary>
+        /// Records the payload as text.
+        /// </summary>
+        /// <remarks>
+        /// Decoded immediately, and deliberately not held as a <see cref="ReadOnlyMemory{T}"/>: the
+        /// sink hands its pooled payload buffer back once this task completes, so anything kept past
+        /// the call would read whatever the next event wrote there.
+        /// </remarks>
+        public async Task Send(ReadOnlyMemory<byte> payload)
         {
+            string message = Encoding.UTF8.GetString(payload.ToArray());
+
             int concurrent = Interlocked.Increment(ref _concurrentSends);
 
             lock (_gate)
@@ -69,7 +80,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Fakes
                 {
                     await _onSend(message).ConfigureAwait(false);
                 }
-            } finally
+            }
+            finally
             {
                 Interlocked.Decrement(ref _concurrentSends);
             }
