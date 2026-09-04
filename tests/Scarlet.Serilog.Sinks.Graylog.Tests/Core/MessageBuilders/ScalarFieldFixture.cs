@@ -187,6 +187,29 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
             Assert.Equal("\"ABC\"", actual);
         }
 
+        /// <summary>
+        /// A default resolver can still customize built-in contracts through modifiers.
+        /// </summary>
+        [Fact]
+        public void Build_WithDefaultResolverModifier_StillHonoursTheModifier()
+        {
+            var resolver = new DefaultJsonTypeInfoResolver();
+            resolver.Modifiers.Add(typeInfo =>
+            {
+                if (typeInfo.Type == typeof(int))
+                {
+                    typeInfo.NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.WriteAsString;
+                }
+            });
+
+            var serializerOptions = new JsonSerializerOptions { TypeInfoResolver = resolver };
+            GelfMessageBuilder messageBuilder = new("localhost", OptionsWith(serializerOptions));
+
+            string actual = FieldJson(messageBuilder, 42);
+
+            Assert.Equal("\"42\"", actual);
+        }
+
         [Fact]
         public void Build_DictionaryValue_IsWrittenAsAJsonObjectOfRenderedKeys()
         {
