@@ -11,7 +11,10 @@
     <!--Analyzers alone cannot prove Native AOT compatibility; the docs are explicit that the app has
         to be published and run. This project exists to be published, so any IL warning coming from the
         sink or its dependencies fails the build.-->
-    <PublishAot>true</PublishAot>
+    <!--A normal solution test run stays JIT-compiled so coverage can instrument the same
+        reflection-disabled paths. Supplying a RID for the publish job enables Native AOT.-->
+    <PublishAot Condition="'$(RuntimeIdentifier)' != ''">true</PublishAot>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <!--Report every trimmer warning rather than collapsing them to one per assembly.-->
     <TrimmerSingleWarn>false</TrimmerSingleWarn>
