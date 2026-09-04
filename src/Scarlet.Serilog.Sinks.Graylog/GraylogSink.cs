@@ -71,12 +71,12 @@ namespace Scarlet.Serilog.Sinks.Graylog
 
             ISinkComponentsBuilder sinkComponentsBuilder = new SinkComponentsBuilder(options);
 
-            var jsonSerializerOptions = options.Message.JsonSerializerOptions ?? new JsonSerializerOptions(JsonSerializerDefaults.General);
+            var jsonSerializerOptions = options.Message.JsonSerializerOptions;
             _options = new JsonSerializerOptions(jsonSerializerOptions);
 
             _shutdownTimeout = options.Delivery.ShutdownTimeout;
             _transport = new Lazy<ITransport>(sinkComponentsBuilder.MakeTransport);
-            _converter = new Lazy<IGelfConverter>(() => sinkComponentsBuilder.MakeGelfConverter());
+            _converter = new Lazy<IGelfConverter>(sinkComponentsBuilder.MakeGelfConverter);
         }
 
         /// <inheritdoc />
