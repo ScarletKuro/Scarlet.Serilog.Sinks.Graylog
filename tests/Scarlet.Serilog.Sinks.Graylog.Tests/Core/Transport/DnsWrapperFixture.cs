@@ -12,17 +12,6 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport
     public class DnsWrapperFixture
     {
         [Fact]
-        public async Task GetHostAddresses_ReturnsTheLoopbackAddresses()
-        {
-            var target = new DnsWrapper();
-
-            IPAddress[] actual = await target.GetHostAddresses("localhost");
-
-            Assert.NotEmpty(actual);
-            Assert.All(actual, address => Assert.True(IPAddress.IsLoopback(address)));
-        }
-
-        [Fact]
         public async Task GetIpAddress_ReturnsTheFirstIpv4Address()
         {
             var target = new DnsWrapper();

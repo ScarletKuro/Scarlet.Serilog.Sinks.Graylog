@@ -412,7 +412,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
                 target.Dispose();
 
                 Assert.Equal(0, certificate.DisposeCount);
-            } finally
+            }
+            finally
             {
                 certificate.Dispose();
             }

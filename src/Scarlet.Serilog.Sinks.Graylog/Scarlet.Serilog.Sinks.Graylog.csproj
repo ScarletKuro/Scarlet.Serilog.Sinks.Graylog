@@ -73,5 +73,6 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Scarlet.Serilog.Sinks.Graylog.Tests, PublicKey=$(AssemblySignPublicKey)" />
+    <InternalsVisibleTo Include="Scarlet.Serilog.Sinks.Graylog.Benchmarks, PublicKey=$(AssemblySignPublicKey)" />
   </ItemGroup>
 </Project>

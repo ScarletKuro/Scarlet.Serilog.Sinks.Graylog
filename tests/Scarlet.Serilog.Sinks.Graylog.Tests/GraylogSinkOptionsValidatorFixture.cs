@@ -44,6 +44,16 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         }
 
         [Fact]
+        public void Validate_WithoutJsonSerializerOptions_Throws()
+        {
+            GraylogSinkOptions options = Options(
+                TransportType.Udp,
+                o => o.Message.JsonSerializerOptions = null!);
+
+            Assert.Equal("JsonSerializerOptions", Throws<ArgumentNullException>(options).ParamName);
+        }
+
+        [Fact]
         public void Validate_WithoutDeliveryOptions_Throws()
         {
             GraylogSinkOptions options = Options(TransportType.Udp, o => o.Delivery = null!);

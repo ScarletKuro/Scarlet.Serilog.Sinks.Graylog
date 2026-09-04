@@ -3,6 +3,8 @@ using Scarlet.Serilog.Sinks.Graylog.Core;
 using Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders;
 using System;
 using System.Collections.Generic;
+using System.Buffers;
+using System.Text.Json;
 using Xunit;
 
 namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core
@@ -25,10 +27,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core
 
             var simpleEvent = LogEventSource.GetSimpleLogEvent(DateTimeOffset.Now);
 
-            target.GetGelfJson(simpleEvent);
+            using var writer = new Utf8JsonWriter(new ArrayBufferWriter<byte>());
 
-            errorBuilder.DidNotReceive().Build(simpleEvent);
-            messageBuilder.Received(1).Build(simpleEvent);
+            target.WriteGelfJson(simpleEvent, writer);
+
+            errorBuilder.DidNotReceive().Build(simpleEvent, Arg.Any<Utf8JsonWriter>());
+            messageBuilder.Received(1).Build(simpleEvent, Arg.Any<Utf8JsonWriter>());
         }
 
         [Fact]
@@ -47,10 +51,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core
 
             var simpleEvent = LogEventSource.GetErrorEvent(DateTimeOffset.Now);
 
-            target.GetGelfJson(simpleEvent);
+            using var writer = new Utf8JsonWriter(new ArrayBufferWriter<byte>());
 
-            errorBuilder.Received(1).Build(simpleEvent);
-            messageBuilder.DidNotReceive().Build(simpleEvent);
+            target.WriteGelfJson(simpleEvent, writer);
+
+            errorBuilder.Received(1).Build(simpleEvent, Arg.Any<Utf8JsonWriter>());
+            messageBuilder.DidNotReceive().Build(simpleEvent, Arg.Any<Utf8JsonWriter>());
         }
     }
 }

@@ -14,8 +14,10 @@ indent_size = 2
 [*.sh]
 end_of_line = lf
 
-[*.{cmd, bat}]
+[*.{cmd,bat}]
 end_of_line = crlf
+
+[*.cs]
 
 # C# formatting settings - Namespace options
 csharp_style_namespace_declarations = file_scoped:suggestion
@@ -45,3 +47,82 @@ csharp_space_around_declaration_statements = false
 csharp_space_before_open_square_brackets = false
 csharp_space_between_empty_square_brackets = false
 csharp_space_between_square_brackets = false
+
+# C# formatting settings - Braces
+# IDE0011: require braces on every if/else/for/foreach/while/using/lock
+csharp_prefer_braces = true:warning
+dotnet_diagnostic.IDE0011.severity = warning
+
+# C# formatting settings - New lines (Allman)
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+csharp_new_line_before_members_in_object_initializers = true
+csharp_new_line_before_members_in_anonymous_types = true
+csharp_new_line_between_query_expression_clauses = true
+
+# C# formatting settings - Blank lines
+# IDE2000: no two or more consecutive blank lines
+dotnet_diagnostic.IDE2000.severity = warning
+# IDE2001: embedded statement must be on its own line
+dotnet_diagnostic.IDE2001.severity = warning
+# IDE2002: no blank line between consecutive braces
+dotnet_diagnostic.IDE2002.severity = warning
+# IDE2003: blank line required between a block and the statement after it
+dotnet_diagnostic.IDE2003.severity = warning
+# IDE2004: no blank line after a constructor initializer colon
+dotnet_diagnostic.IDE2004.severity = warning
+# IDE2005: no blank line after a conditional expression token
+dotnet_diagnostic.IDE2005.severity = warning
+# IDE2006: no blank line after an arrow expression clause token
+dotnet_diagnostic.IDE2006.severity = warning
+# ReSharper/Rider equivalents (Roslyn has no max-blank-line option)
+csharp_keep_blank_lines_in_declarations = 1
+csharp_keep_blank_lines_in_code = 1
+csharp_blank_lines_after_block_statements = 1
+csharp_remove_blank_lines_near_braces_in_declarations = true
+csharp_remove_blank_lines_near_braces_in_code = true
+
+# C# formatting settings - Attributes (Rider/ReSharper only; Roslyn has no such option)
+# never put [Attr] on the same line as the member it decorates
+csharp_place_attribute_on_same_line = never
+csharp_place_field_attribute_on_same_line = never
+csharp_place_accessorholder_attribute_on_same_line = never
+csharp_place_simple_accessor_attribute_on_same_line = never
+
+# C# naming settings
+# IDE1006: enforce the naming rules below
+dotnet_diagnostic.IDE1006.severity = warning
+
+# Symbol groups
+dotnet_naming_symbols.private_const_fields.applicable_kinds = field
+dotnet_naming_symbols.private_const_fields.applicable_accessibilities = private, protected, private_protected, internal, protected_internal
+dotnet_naming_symbols.private_const_fields.required_modifiers = const
+
+dotnet_naming_symbols.private_static_readonly_fields.applicable_kinds = field
+dotnet_naming_symbols.private_static_readonly_fields.applicable_accessibilities = private, protected, private_protected, internal, protected_internal
+dotnet_naming_symbols.private_static_readonly_fields.required_modifiers = static, readonly
+
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private, protected, private_protected, internal, protected_internal
+
+# Naming styles
+dotnet_naming_style.pascal_case.capitalization = pascal_case
+
+dotnet_naming_style.underscore_camel_case.capitalization = camel_case
+dotnet_naming_style.underscore_camel_case.required_prefix = _
+
+# Rules (first match wins, so const/static-readonly must precede the general field rule)
+dotnet_naming_rule.private_const_fields_are_pascal_case.symbols = private_const_fields
+dotnet_naming_rule.private_const_fields_are_pascal_case.style = pascal_case
+dotnet_naming_rule.private_const_fields_are_pascal_case.severity = warning
+
+dotnet_naming_rule.private_static_readonly_fields_are_pascal_case.symbols = private_static_readonly_fields
+dotnet_naming_rule.private_static_readonly_fields_are_pascal_case.style = pascal_case
+dotnet_naming_rule.private_static_readonly_fields_are_pascal_case.severity = warning
+
+# private readonly TimeSpan? _shutdownTimeout;
+dotnet_naming_rule.private_fields_are_underscore_camel_case.symbols = private_fields
+dotnet_naming_rule.private_fields_are_underscore_camel_case.style = underscore_camel_case
+dotnet_naming_rule.private_fields_are_underscore_camel_case.severity = warning

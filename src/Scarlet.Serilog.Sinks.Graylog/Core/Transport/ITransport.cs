@@ -9,9 +9,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport
     public interface ITransport : IDisposable
     {
         /// <summary>
-        /// Sends the specified target.
+        /// Sends the specified GELF message.
         /// </summary>
-        /// <param name="message">The message.</param>
-        Task Send(string message);
+        /// <param name="message">The GELF payload, as UTF-8.</param>
+        Task Send(ReadOnlyMemory<byte> message);
     }
 }

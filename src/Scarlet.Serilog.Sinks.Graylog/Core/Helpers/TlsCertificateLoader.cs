@@ -34,7 +34,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
 
             string path = options.ClientCertificatePath ?? throw new InvalidOperationException("A TLS client certificate path is required.");
             if (!File.Exists(path))
+            {
                 throw new FileNotFoundException($"The TLS client certificate file '{path}' was not found.", path);
+            }
 
             try
             {

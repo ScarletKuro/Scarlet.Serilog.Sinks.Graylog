@@ -51,7 +51,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Aot.Tests
                 // rather than earned. It stays because a trimming regression that broke serialization
                 // outright would surface here, and it carries over from the console harness.
                 Assert.Equal(string.Empty, selfLog.ToString());
-            } finally
+            }
+            finally
             {
                 SelfLog.Disable();
             }

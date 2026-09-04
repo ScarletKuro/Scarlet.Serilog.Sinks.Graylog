@@ -4,78 +4,129 @@ using Scarlet.Serilog.Sinks.Graylog.Core.Extensions;
 using Scarlet.Serilog.Sinks.Graylog.Core.Helpers;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 
 namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
 {
-    /// <summary>
-    /// Message builder
-    /// </summary>
-    /// <seealso cref="IMessageBuilder" />
+    /// <summary>Writes a log event as a GELF JSON object.</summary>
     public class GelfMessageBuilder : IMessageBuilder
     {
         private const string DefaultGelfVersion = "1.1";
-
-        /// <summary>Gets the GELF payload options this builder was created with.</summary>
-        protected GelfOptions Options { get; }
+        private const string StringLevel = "stringLevel";
+        private const string Facility = "facility";
 
         private readonly string _hostName;
 
         /// <summary>
-        /// Built on first use and rebuilt if <see cref="GelfOptions.JsonSerializerOptions"/> is
-        /// swapped for a different instance, since the writer caches contracts per options instance.
+        /// Writes scalar field values, built once from the serializer options this builder was created
+        /// with.
         /// </summary>
-        private ScalarJsonWriter? _scalarJsonWriter;
+        /// <remarks>
+        /// A sink supplies the serializer-options snapshot it captured at construction, so its writer
+        /// configuration and both of its lazy message builders always agree. A builder constructed
+        /// directly takes its own snapshot here instead.
+        /// </remarks>
+        private readonly ScalarJsonWriter _scalarJsonWriter;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="GelfMessageBuilder"/> class.
-        /// </summary>
-        /// <param name="hostName">Name of the host.</param>
-        /// <param name="options">The options.</param>
+        /// <summary>Gets the GELF payload options this builder was created with.</summary>
+        protected GelfOptions Options { get; }
+
+        /// <summary>Initializes a GELF message builder.</summary>
+        /// <exception cref="ArgumentNullException"><paramref name="options"/> is <c>null</c>.</exception>
         public GelfMessageBuilder(string hostName, GelfOptions options)
+            : this(hostName, options, GetSerializerOptions(options))
         {
-            _hostName = hostName;
-            Options = options;
         }
 
-
-        /// <summary>
-        /// Builds the specified log event.
-        /// </summary>
-        /// <param name="logEvent">The log event.</param>
-        /// <returns></returns>
-        public virtual JsonObject Build(LogEvent logEvent)
+        internal GelfMessageBuilder(
+            string hostName,
+            GelfOptions options,
+            JsonSerializerOptions serializerOptions)
         {
-            string message = logEvent.RenderMessage();
-            string shortMessage = message.Truncate(Options.ShortMessageMaxLength);
-
-            var jsonObject = new JsonObject
+            if (options == null)
             {
-                ["version"] = DefaultGelfVersion,
-                ["host"] = Options.HostnameOverride ?? _hostName,
-                ["short_message"] = shortMessage,
-                ["timestamp"] = logEvent.Timestamp.ConvertToNix(),
-                ["level"] = LogLevelMapper.GetMappedLevel(logEvent.Level),
-                ["_stringLevel"] = logEvent.Level.ToString()
-            };
-
-            // Omitted rather than sent as a JSON null when no facility is configured: an explicit null
-            // still creates the field on the stored message, so every event carried an empty _facility
-            // that nobody set and nothing can search on.
-            if (Options.Facility != null)
-            {
-                jsonObject["_facility"] = Options.Facility;
+                throw new ArgumentNullException(nameof(options));
             }
 
-            if (message.Length > Options.ShortMessageMaxLength)
+            if (serializerOptions == null)
             {
-                jsonObject.Add("full_message", message);
+                throw new ArgumentNullException(nameof(serializerOptions));
             }
 
-            // Collected once. Re-running the token query inside the loop made this quadratic in
-            // properties times template tokens, and allocated two enumerators and a closure per property.
+            _hostName = hostName;
+            Options = options;
+            _scalarJsonWriter = new ScalarJsonWriter(serializerOptions);
+        }
+
+        private static JsonSerializerOptions GetSerializerOptions(GelfOptions options)
+        {
+            if (options == null)
+            {
+                throw new ArgumentNullException(nameof(options));
+            }
+
+            return options.JsonSerializerOptions;
+        }
+
+        /// <inheritdoc />
+        public virtual void Build(LogEvent logEvent, Utf8JsonWriter writer)
+        {
+            if (logEvent == null)
+            {
+                throw new ArgumentNullException(nameof(logEvent));
+            }
+
+            if (writer == null)
+            {
+                throw new ArgumentNullException(nameof(writer));
+            }
+
+            var fields = new GelfFieldWriter(writer, _scalarJsonWriter);
+
+            writer.WriteStartObject();
+            WriteCoreFields(logEvent, fields);
+            WriteExtraFields(logEvent, fields);
+            WriteProperties(logEvent, fields);
+            writer.WriteEndObject();
+        }
+
+        /// <summary>Adds fields supplied by a specialized builder.</summary>
+        protected virtual void WriteExtraFields(LogEvent logEvent, GelfFieldWriter fields)
+        {
+        }
+
+        private void WriteCoreFields(LogEvent logEvent, GelfFieldWriter fields)
+        {
+            Utf8JsonWriter writer = fields.Writer;
+            string rendered = logEvent.RenderMessage();
+            int shortLength = Math.Min(rendered.Length, Options.ShortMessageMaxLength);
+
+            writer.WriteString("version", DefaultGelfVersion);
+            writer.WriteString("host", Options.HostnameOverride ?? _hostName);
+            writer.WriteString("short_message", rendered.AsSpan(0, shortLength));
+            writer.WriteNumber("timestamp", logEvent.Timestamp.ConvertToNix());
+            writer.WriteNumber("level", LogLevelMapper.GetMappedLevel(logEvent.Level));
+
+            if (fields.BeginField(StringLevel))
+            {
+                writer.WriteStringValue(LogLevelMapper.GetLevelName(logEvent.Level));
+            }
+
+            if (Options.Facility != null && fields.BeginField(Facility))
+            {
+                writer.WriteStringValue(Options.Facility);
+            }
+
+            if (rendered.Length > Options.ShortMessageMaxLength)
+            {
+                writer.WriteString("full_message", rendered);
+            }
+        }
+
+        private void WriteProperties(LogEvent logEvent, GelfFieldWriter fields)
+        {
             HashSet<string>? templateProperties = null;
 
             if (Options.ExcludeMessageTemplateProperties)
@@ -98,256 +149,102 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
                     continue;
                 }
 
-                AddAdditionalField(jsonObject, property);
+                WriteAdditionalField(fields, property.Key, property.Value);
             }
 
             if (Options.IncludeMessageTemplate)
             {
-                string messageTemplate = logEvent.MessageTemplate.Text;
-
-                AddGelfField(jsonObject, Options.MessageTemplateFieldName, messageTemplate);
-            }
-
-            return jsonObject;
-        }
-
-        private ScalarJsonWriter ScalarJsonWriter
-        {
-            get
-            {
-                JsonSerializerOptions options = Options.JsonSerializerOptions;
-                ScalarJsonWriter? writer = _scalarJsonWriter;
-
-                if (writer == null || !ReferenceEquals(writer.Options, options))
-                {
-                    writer = new ScalarJsonWriter(options);
-                    _scalarJsonWriter = writer;
-                }
-
-                return writer;
+                fields.WriteField(Options.MessageTemplateFieldName, logEvent.MessageTemplate.Text);
             }
         }
 
-        /// <summary>
-        /// Writes one GELF additional field, applying the naming rules the format requires.
-        /// </summary>
-        /// <param name="target">The GELF message being built.</param>
-        /// <param name="name">The field name, without the leading underscore.</param>
-        /// <param name="value">The value; <c>null</c> is written as a JSON null.</param>
-        /// <remarks>
-        /// GELF requires additional fields to carry a leading underscore, reserves <c>_id</c>, and accepts
-        /// only <c>^[\w\.\-]*$</c> in a field name - anything else is replaced with an underscore.
-        /// The character rule is the one that bites: Graylog drops a field with an invalid name outright,
-        /// so an unsanitized dictionary key loses the value. Two names that collide after sanitizing are
-        /// written last-wins rather than throwing, because <c>JsonObject.Add</c> would take the whole
-        /// event down with an <see cref="ArgumentException"/>.
-        /// </remarks>
-        protected static void AddGelfField(JsonObject target, string name, JsonNode? value)
+        private void WriteAdditionalField(
+            GelfFieldWriter fields,
+            string name,
+            LogEventPropertyValue value,
+            string memberPath = "")
         {
-            target[ToGelfFieldName(name)] = CoerceForGraylog(value);
-        }
+            string key = memberPath.Length == 0 ? name : $"{memberPath}.{name}";
 
-        /// <summary>
-        /// Graylog drops boolean additional fields, so they are written as their text form instead.
-        /// </summary>
-        /// <remarks>
-        /// Verified against Graylog 6.1: a field sent as a JSON <c>true</c> or <c>false</c> never appears
-        /// on the stored message, while the strings <c>"true"</c> and <c>"false"</c> do, and stay
-        /// searchable as <c>MyFlag:true</c>. Losing the field entirely is the worse of the two.
-        /// </remarks>
-        private static JsonNode? CoerceForGraylog(JsonNode? value)
-        {
-            if (value == null)
-            {
-                return null;
-            }
-
-            // Kind rather than a type test: a bool reaches here either as a CLR value or wrapped in a
-            // JsonElement, depending on whether a contract served it.
-            return value.GetValueKind() switch
-            {
-                JsonValueKind.True => "true",
-                JsonValueKind.False => "false",
-                _ => value
-            };
-        }
-
-        private static string ToGelfFieldName(string name)
-        {
-            if (IsReserved(name))
-            {
-                name += "_";
-            }
-
-            string sanitized = SanitizeFieldName(name);
-
-            return sanitized.StartsWith("_", StringComparison.Ordinal)
-                ? sanitized
-                : $"_{sanitized}";
-        }
-
-        /// <summary>
-        /// Reports whether Graylog would swallow a field of this name once it strips the underscore.
-        /// </summary>
-        /// <remarks>
-        /// Graylog matches these case-sensitively - verified against 6.1, where <c>_message</c> is
-        /// discarded but <c>_Message</c> is kept - so only the exact spellings are escaped, and the
-        /// PascalCase names Serilog properties usually carry are left alone. <c>id</c> is the exception:
-        /// the GELF spec tells libraries not to emit <c>_id</c> at all, so it is escaped whatever its
-        /// casing, for the benefit of consumers stricter than Graylog.
-        /// </remarks>
-        private static bool IsReserved(string name)
-        {
-            if (name.Equals("id", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            // Graylog sets these itself and skips the incoming field, or reserves the prefix outright.
-            switch (name)
-            {
-                case "message":
-                case "source":
-                case "timestamp":
-                case "level":
-                case "host":
-                case "full_message":
-                    return true;
-                default:
-                    return name.StartsWith("gl2_", StringComparison.Ordinal);
-            }
-        }
-
-        /// <summary>
-        /// Replaces every character GELF does not allow in a field name with an underscore.
-        /// </summary>
-        /// <remarks>
-        /// Written as a scan rather than a <c>Regex</c> so the sink keeps no regular-expression
-        /// dependency on the Native AOT path, and so the overwhelmingly common case - a name that is
-        /// already valid - allocates nothing.
-        /// </remarks>
-        private static string SanitizeFieldName(string name)
-        {
-            int firstInvalid = -1;
-
-            for (int i = 0; i < name.Length; i++)
-            {
-                if (!IsAllowedInFieldName(name[i]))
-                {
-                    firstInvalid = i;
-                    break;
-                }
-            }
-
-            if (firstInvalid < 0)
-            {
-                return name;
-            }
-
-            char[] characters = name.ToCharArray();
-
-            for (int i = firstInvalid; i < characters.Length; i++)
-            {
-                if (!IsAllowedInFieldName(characters[i]))
-                {
-                    characters[i] = '_';
-                }
-            }
-
-            return new string(characters);
-        }
-
-        // Graylog verifies field names with ^[\w\.\-]*$, and its \w is ASCII-only.
-        private static bool IsAllowedInFieldName(char character)
-        {
-            return (character >= 'a' && character <= 'z')
-                || (character >= 'A' && character <= 'Z')
-                || (character >= '0' && character <= '9')
-                || character == '_'
-                || character == '.'
-                || character == '-';
-        }
-
-        private void AddAdditionalField(JsonObject jObject,
-                                        KeyValuePair<string, LogEventPropertyValue> property,
-                                        string memberPath = "")
-        {
-            string key = string.IsNullOrEmpty(memberPath)
-                ? property.Key
-                : $"{memberPath}.{property.Key}";
-
-            switch (property.Value)
+            switch (value)
             {
                 case ScalarValue scalarValue:
-                    AddGelfField(jObject, key, scalarValue.Value == null
-                        ? null
-                        : ScalarJsonWriter.ToJsonNode(scalarValue.Value));
+                    if (fields.BeginField(key))
+                    {
+                        if (scalarValue.Value == null)
+                        {
+                            fields.Writer.WriteNullValue();
+                        }
+                        else
+                        {
+                            fields.Scalars.WriteValue(fields.Writer, scalarValue.Value);
+                        }
+                    }
 
                     break;
                 case SequenceValue sequenceValue:
-                    AddGelfField(jObject, key, RenderPropertyValue(sequenceValue));
+                    fields.WriteField(key, RenderPropertyValue(sequenceValue));
 
                     if (Options.ParseArrayValues)
                     {
-                        int counter = 0;
+                        int index = 0;
 
-                        foreach (var sequenceElement in sequenceValue.Elements)
+                        foreach (LogEventPropertyValue element in sequenceValue.Elements)
                         {
-                            AddAdditionalField(jObject, new KeyValuePair<string, LogEventPropertyValue>(counter.ToString(), sequenceElement), key);
-
-                            counter++;
+                            WriteAdditionalField(fields, index.ToString(CultureInfo.InvariantCulture), element, key);
+                            index++;
                         }
                     }
 
                     break;
                 case StructureValue structureValue:
-                    foreach (LogEventProperty logEventProperty in structureValue.Properties)
+                    foreach (LogEventProperty property in structureValue.Properties)
                     {
-                        AddAdditionalField(jObject,
-                                           new KeyValuePair<string, LogEventPropertyValue>(logEventProperty.Name, logEventProperty.Value),
-                                           key);
+                        WriteAdditionalField(fields, property.Name, property.Value, key);
                     }
 
                     break;
                 case DictionaryValue dictionaryValue:
-                    if (Options.ParseArrayValues)
-                    {
-                        foreach (KeyValuePair<ScalarValue, LogEventPropertyValue> dictionaryValueElement in dictionaryValue.Elements)
-                        {
-                            var renderedKey = RenderPropertyValue(dictionaryValueElement.Key);
-
-                            AddAdditionalField(jObject, new KeyValuePair<string, LogEventPropertyValue>(renderedKey, dictionaryValueElement.Value), key);
-                        }
-                    } else
-                    {
-                        // Built directly rather than serialized from a Dictionary<object, string>: the object
-                        // key made that an untyped serialization call, which Native AOT cannot support.
-                        // Rendering the keys is also what makes the result a well-formed JSON object, since
-                        // Serilog permits primitives, the built-in scalars and enums as dictionary keys.
-                        var nested = new JsonObject();
-
-                        foreach (KeyValuePair<ScalarValue, LogEventPropertyValue> dictionaryValueElement in dictionaryValue.Elements)
-                        {
-                            nested[RenderPropertyValue(dictionaryValueElement.Key)] = RenderPropertyValue(dictionaryValueElement.Value);
-                        }
-
-                        AddGelfField(jObject, key, nested);
-                    }
+                    WriteDictionary(fields, key, dictionaryValue);
 
                     break;
             }
         }
 
-        private static string RenderPropertyValue(LogEventPropertyValue propertyValue)
+        private void WriteDictionary(GelfFieldWriter fields, string key, DictionaryValue dictionaryValue)
         {
-            using TextWriter tw = new StringWriter();
+            if (Options.ParseArrayValues)
+            {
+                foreach (KeyValuePair<ScalarValue, LogEventPropertyValue> element in dictionaryValue.Elements)
+                {
+                    WriteAdditionalField(fields, RenderPropertyValue(element.Key), element.Value, key);
+                }
 
-            propertyValue.Render(tw);
+                return;
+            }
 
-            string result = tw.ToString()!;
-            result = result.Trim('"');
+            if (!fields.BeginField(key))
+            {
+                return;
+            }
 
-            return result;
+            fields.Writer.WriteStartObject();
+
+            foreach (KeyValuePair<ScalarValue, LogEventPropertyValue> element in dictionaryValue.Elements)
+            {
+                fields.Writer.WriteString(RenderPropertyValue(element.Key), RenderPropertyValue(element.Value));
+            }
+
+            fields.Writer.WriteEndObject();
+        }
+
+        private static string RenderPropertyValue(LogEventPropertyValue value)
+        {
+            using TextWriter writer = new StringWriter();
+
+            value.Render(writer);
+
+            return writer.ToString()!.Trim('"');
         }
     }
 }

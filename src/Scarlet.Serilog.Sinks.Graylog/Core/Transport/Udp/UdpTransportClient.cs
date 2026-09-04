@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
@@ -16,8 +16,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
     /// first send and re-resolved every <see cref="UdpTransportOptions.DnsRefreshInterval"/>; a host
     /// that is already an IP literal is never resolved at all.
     /// </remarks>
-    /// <seealso cref="ITransportClient{T}" />
-    public sealed class UdpTransportClient : ITransportClient<byte[]>
+    /// <seealso cref="ITransportClient" />
+    public sealed class UdpTransportClient : ITransportClient
     {
         private IPEndPoint? _ipEndPoint;
 
@@ -142,7 +142,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
         /// </summary>
         /// <param name="payload">The payload.</param>
         /// <exception cref="InvalidOperationException">No host is configured, or it could not be resolved.</exception>
-        public async Task Send(byte[] payload)
+        public async Task Send(ReadOnlyMemory<byte> payload)
         {
             await _sendLock.WaitAsync().ConfigureAwait(false);
             try
@@ -154,7 +154,17 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
 
                 UdpClient client = _client ?? throw new InvalidOperationException("The UDP client could not be initialized.");
                 IPEndPoint endpoint = _ipEndPoint ?? throw new InvalidOperationException("The Graylog endpoint could not be initialized.");
-                await client.SendAsync(payload, payload.Length, endpoint).ConfigureAwait(false);
+#if NET
+                await client.SendAsync(payload, endpoint).ConfigureAwait(false);
+#else
+                // No span-based socket API on this target, and UdpClient.SendAsync always sends from
+                // the start of the array - so the payload can only go out uncopied when it is not an
+                // offset slice, which is the case for every buffer the sink itself produces.
+                ArraySegment<byte> segment = Helpers.ByteBufferWriter.AsArraySegment(payload);
+                byte[] datagram = segment.Offset == 0 ? segment.Array! : payload.ToArray();
+
+                await client.SendAsync(datagram, payload.Length, endpoint).ConfigureAwait(false);
+#endif
             }
             finally
             {

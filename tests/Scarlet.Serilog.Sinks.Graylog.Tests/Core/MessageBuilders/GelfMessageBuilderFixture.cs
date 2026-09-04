@@ -2,13 +2,69 @@ using Serilog.Events;
 using Serilog.Parsing;
 using Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders;
 using System;
+using System.Buffers;
 using System.Collections.Generic;
+using System.Text.Json;
 using Xunit;
 
 namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
 {
     public class GelfMessageBuilderFixture
     {
+        [Fact]
+        public void Constructor_WithoutOptions_Throws()
+        {
+            ArgumentNullException exception = Assert.Throws<ArgumentNullException>(
+                () => new GelfMessageBuilder("localhost", null!));
+
+            Assert.Equal("options", exception.ParamName);
+        }
+
+        [Fact]
+        public void InternalConstructor_WithoutOptions_Throws()
+        {
+            ArgumentNullException exception = Assert.Throws<ArgumentNullException>(
+                () => new GelfMessageBuilder("localhost", null!, new JsonSerializerOptions()));
+
+            Assert.Equal("options", exception.ParamName);
+        }
+
+        [Fact]
+        public void Constructor_WithoutSerializerOptions_Throws()
+        {
+            var options = new GelfOptions { JsonSerializerOptions = null! };
+
+            ArgumentNullException exception = Assert.Throws<ArgumentNullException>(
+                () => new GelfMessageBuilder("localhost", options));
+
+            Assert.Equal("serializerOptions", exception.ParamName);
+        }
+
+        [Fact]
+        public void Build_WithoutLogEvent_Throws()
+        {
+            GelfMessageBuilder messageBuilder = new("localhost", new GelfOptions());
+            var buffer = new ArrayBufferWriter<byte>();
+            using var writer = new Utf8JsonWriter(buffer);
+
+            ArgumentNullException exception = Assert.Throws<ArgumentNullException>(
+                () => messageBuilder.Build(null!, writer));
+
+            Assert.Equal("logEvent", exception.ParamName);
+        }
+
+        [Fact]
+        public void Build_WithoutWriter_Throws()
+        {
+            GelfMessageBuilder messageBuilder = new("localhost", new GelfOptions());
+            LogEvent logEvent = LogEventSource.GetSimpleLogEvent(DateTimeOffset.UnixEpoch);
+
+            ArgumentNullException exception = Assert.Throws<ArgumentNullException>(
+                () => messageBuilder.Build(logEvent, null!));
+
+            Assert.Equal("writer", exception.ParamName);
+        }
+
         [Fact]
         public void GetSimpleLogEvent_GraylogSinkOptionsContainsHost_ReturnsOptionsHost()
         {

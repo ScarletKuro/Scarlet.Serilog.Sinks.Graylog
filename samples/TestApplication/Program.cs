@@ -42,7 +42,7 @@ app.MapPost("/simple_send", () =>
                                     ))
                                 .ToArray();
        seriloglogger.Information("SomeInf {@Forecast}", forecast);
-       
+
        return forecast;
    })
    .WithName("simple_send");

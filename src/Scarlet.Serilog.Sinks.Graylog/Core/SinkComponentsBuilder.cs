@@ -1,4 +1,4 @@
-﻿using Scarlet.Serilog.Sinks.Graylog.Core.Helpers;
+using Scarlet.Serilog.Sinks.Graylog.Core.Helpers;
 using Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http;
@@ -7,30 +7,35 @@ using Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp;
 using System;
 using System.Collections.Generic;
 using System.Net;
+using System.Text.Json;
 using SinkTransportType = Scarlet.Serilog.Sinks.Graylog.Core.Transport.TransportType;
 
 namespace Scarlet.Serilog.Sinks.Graylog.Core
 {
-    internal class SinkComponentsBuilder : ISinkComponentsBuilder
+    internal class SinkComponentsBuilder
     {
         private readonly GraylogSinkOptions _options;
         private readonly Dictionary<BuilderType, Lazy<IMessageBuilder>> _builders;
 
+        /// <summary>The serializer configuration captured when the sink was constructed.</summary>
+        internal JsonSerializerOptions JsonSerializerOptions { get; }
+
         public SinkComponentsBuilder(GraylogSinkOptions options)
         {
             _options = options;
+            JsonSerializerOptions = new JsonSerializerOptions(options.Message.JsonSerializerOptions);
 
             _builders = new Dictionary<BuilderType, Lazy<IMessageBuilder>>
             {
                 [BuilderType.Exception] = new(() =>
                 {
                     string hostName = Dns.GetHostName();
-                    return new ExceptionMessageBuilder(hostName, _options.Message);
+                    return new ExceptionMessageBuilder(hostName, _options.Message, JsonSerializerOptions);
                 }),
                 [BuilderType.Message] = new(() =>
                 {
                     string hostName = Dns.GetHostName();
-                    return new GelfMessageBuilder(hostName, _options.Message);
+                    return new GelfMessageBuilder(hostName, _options.Message, JsonSerializerOptions);
                 })
             };
         }

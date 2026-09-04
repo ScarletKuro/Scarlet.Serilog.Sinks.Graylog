@@ -14,4 +14,7 @@
   <Folder Name="/samples/">
     <Project Path="samples/TestApplication/TestApplication.csproj" />
   </Folder>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/Scarlet.Serilog.Sinks.Graylog.Benchmarks/Scarlet.Serilog.Sinks.Graylog.Benchmarks.csproj" />
+  </Folder>
 </Solution>

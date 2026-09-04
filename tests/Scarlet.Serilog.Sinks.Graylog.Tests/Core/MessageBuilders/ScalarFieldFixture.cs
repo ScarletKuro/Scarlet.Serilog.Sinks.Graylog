@@ -103,17 +103,17 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
         }
 
         /// <summary>
-        /// The one value whose JSON differs between the two paths, and only in how an equivalent
-        /// character is escaped.
+        /// The one value whose JSON used to differ between the two paths now agrees on both.
         /// </summary>
         /// <remarks>
-        /// The contract path stores the already-written JSON, so re-serializing escapes the '+' of the
-        /// offset as \u002B. The reflection-free path stores a typed <see cref="DateTimeOffset"/>, which
-        /// System.Text.Json's own converter writes without escaping. Both decode to the same instant, so
-        /// this is asserted semantically rather than byte-for-byte.
+        /// The contract path used to serialize into a JsonNode, which held the written JSON and
+        /// escaped the '+' of the offset a second time on the way out. The reflection-free path held
+        /// a typed <see cref="DateTimeOffset"/> and wrote it once. Writing values straight into the
+        /// payload removed that second pass, so both paths now produce what the System.Text.Json
+        /// converter itself emits.
         /// </remarks>
         [Fact]
-        public void Build_DateTimeOffset_BothPathsDecodeToTheSameInstant()
+        public void Build_DateTimeOffset_IsWrittenTheSameOnBothPaths()
         {
             DateTimeOffset value = new(2026, 9, 2, 13, 45, 30, TimeSpan.FromHours(3));
             GelfMessageBuilder contractBuilder = new("localhost", OptionsWith(new JsonSerializerOptions()));
@@ -122,7 +122,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
             string contractJson = FieldJson(contractBuilder, value);
             string fallbackJson = FieldJson(fallbackBuilder, value);
 
-            Assert.Equal("\"2026-09-02T13:45:30\\u002B03:00\"", contractJson);
+            Assert.Equal("\"2026-09-02T13:45:30+03:00\"", contractJson);
             Assert.Equal("\"2026-09-02T13:45:30+03:00\"", fallbackJson);
             Assert.Equal(value, JsonSerializer.Deserialize<DateTimeOffset>(contractJson));
             Assert.Equal(value, JsonSerializer.Deserialize<DateTimeOffset>(fallbackJson));
@@ -147,6 +147,24 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
             string actual = FieldJson(messageBuilder, value);
 
             Assert.Equal(expected, actual);
+        }
+
+        [Fact]
+        public void Build_RepeatedUnsupportedType_UsesTheCachedReflectionFreePath()
+        {
+            GelfMessageBuilder messageBuilder = new("localhost", OptionsWith(new JsonSerializerOptions()));
+
+            Assert.Equal("123", FieldJson(messageBuilder, (IntPtr)123));
+            Assert.Equal("456", FieldJson(messageBuilder, (IntPtr)456));
+        }
+
+        [Fact]
+        public void Build_RepeatedTypeWithoutAContract_UsesTheCachedReflectionFreePath()
+        {
+            GelfMessageBuilder messageBuilder = new("localhost", OptionsWith(NoContracts()));
+
+            Assert.Equal("\"first\"", FieldJson(messageBuilder, new Unknown("first")));
+            Assert.Equal("\"second\"", FieldJson(messageBuilder, new Unknown("second")));
         }
 
         [Fact]
@@ -185,6 +203,32 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
             string actual = FieldJson(messageBuilder, "abc");
 
             Assert.Equal("\"ABC\"", actual);
+        }
+
+        /// <summary>
+        /// Writing a payload must not freeze the consumer's own serializer options.
+        /// </summary>
+        /// <remarks>
+        /// Resolving a contract - and populating a missing resolver, which the sink does explicitly
+        /// so that unconfigured options keep working - makes a <c>JsonSerializerOptions</c> instance
+        /// read-only. One instance shared between the sink and the application's own serialization is
+        /// an ordinary arrangement, and freezing it turned the consumer's next setter into an
+        /// <see cref="InvalidOperationException"/> from the first log event onwards, so the sink
+        /// resolves contracts through a private copy instead.
+        /// </remarks>
+        [Fact]
+        public void Build_DoesNotFreezeTheSerializerOptionsItWasGiven()
+        {
+            JsonSerializerOptions serializerOptions = new();
+            GelfMessageBuilder messageBuilder = new("localhost", OptionsWith(serializerOptions));
+
+            // A value on the contract path, and one on the reflection-free path.
+            FieldJson(messageBuilder, new Uri("https://example.com/gelf"));
+            FieldJson(messageBuilder, 42);
+
+            serializerOptions.WriteIndented = true;
+
+            Assert.True(serializerOptions.WriteIndented);
         }
 
         /// <summary>
@@ -264,11 +308,21 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
             };
         }
 
+        /// <summary>
+        /// The JSON the builder wrote for the single additional field, exactly as it reaches the wire.
+        /// </summary>
+        /// <remarks>
+        /// Read out of the payload with <see cref="JsonElement.GetRawText"/> rather than through a
+        /// <see cref="JsonNode"/>: re-serializing a node re-escapes what it holds, which is the very
+        /// thing these cases are pinning.
+        /// </remarks>
         private static string FieldJson(GelfMessageBuilder messageBuilder, object value)
         {
             LogEvent logEvent = LogEventSource.GetScalarEvent("Val", value);
 
-            return messageBuilder.Build(logEvent).Json("_Val");
+            using JsonDocument document = JsonDocument.Parse(messageBuilder.BuildPayload(logEvent));
+
+            return document.RootElement.GetProperty("_Val").GetRawText();
         }
 
         private sealed class EmptyTypeInfoResolver : IJsonTypeInfoResolver
@@ -279,7 +333,13 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
         private sealed class UpperCaseStringConverter : System.Text.Json.Serialization.JsonConverter<string>
         {
             public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-                => reader.GetString()!;
+            {
+                string? value = reader.GetString();
+
+                Assert.NotNull(value);
+
+                return value;
+            }
 
             public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
                 => writer.WriteStringValue(value.ToUpperInvariant());
@@ -290,7 +350,14 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
         /// </summary>
         private sealed class Unknown
         {
-            public override string ToString() => "unknown-value";
+            private readonly string _value;
+
+            public Unknown(string value = "unknown-value")
+            {
+                _value = value;
+            }
+
+            public override string ToString() => _value;
         }
 
         private enum ByteEnum : byte

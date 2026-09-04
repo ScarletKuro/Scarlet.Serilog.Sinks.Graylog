@@ -1,7 +1,8 @@
+using Scarlet.Serilog.Sinks.Graylog.Core.Helpers;
 using Serilog.Events;
 using System;
 using System.Text;
-using System.Text.Json.Nodes;
+using System.Text.Json;
 
 namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
 {
@@ -23,6 +24,13 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
         {
         }
 
+        internal ExceptionMessageBuilder(
+            string hostName,
+            GelfOptions options,
+            JsonSerializerOptions serializerOptions)
+            : base(hostName, options, serializerOptions)
+        {
+        }
 
         /// <inheritdoc />
         /// <remarks>
@@ -37,59 +45,69 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
         /// event.
         /// </para>
         /// </remarks>
-        public override JsonObject Build(LogEvent logEvent)
+        protected override void WriteExtraFields(LogEvent logEvent, GelfFieldWriter fields)
         {
-            JsonObject payload = base.Build(logEvent);
-
             // GelfConverter only routes to this builder when logEvent.Exception is non-null.
             Exception exception = logEvent.Exception!;
 
-            Tuple<string, string?> excMessageTuple = GetExceptionMessages(exception);
-            string exceptionDetail = excMessageTuple.Item1;
-            string? stackTrace = excMessageTuple.Item2;
-            string? source = exception.Source;
-            string type = exception.GetType().FullName!;
+            fields.WriteField("ExceptionSource", exception.Source);
+            fields.WriteField("ExceptionType", exception.GetType().FullName);
 
-            AddGelfField(payload, "ExceptionSource", source);
-            AddGelfField(payload, "ExceptionType", type);
-            AddGelfField(payload, "ExceptionMessage", exceptionDetail);
-            AddGelfField(payload, "StackTrace", stackTrace);
+            var messages = new StringBuilder();
+            var stackTraces = new StringBuilder();
 
-            return payload;
+            Flatten(exception, messages, stackTraces);
+
+            fields.WriteField("ExceptionMessage", messages.ToString().Trim());
+
+            if (stackTraces.Length > 0)
+            {
+                fields.WriteField("StackTrace", stackTraces.ToString().Trim());
+            }
+            else
+            {
+                fields.WriteField("StackTrace", null);
+            }
         }
 
         /// <summary>
-        /// Get the message details from all nested exceptions, up to 10 in depth.
+        /// Joins the messages of the exception chain, and the stack trace of every link that has one,
+        /// up to <see cref="GelfOptions.StackTraceDepth"/> levels deep.
         /// </summary>
-        /// <param name="ex">Exception to get details for</param>
-        private Tuple<string, string?> GetExceptionMessages(Exception ex)
+        private void Flatten(Exception exception, StringBuilder messages, StringBuilder stackTraces)
         {
-            var exceptionSb = new StringBuilder();
-            var stackSb = new StringBuilder();
-            Exception? nestedException = ex;
-            string? stackDetail = null;
+            Exception? nested = exception;
+            int counter = 0;
 
-            var counter = 0;
             do
             {
-                exceptionSb.Append(nestedException.Message).Append(DefaultExceptionDelimiter);
-                if (nestedException.StackTrace != null)
+                if (counter > 0)
                 {
-                    stackSb.AppendLine(nestedException.StackTrace).AppendLine(DefaultStackTraceDelimiter);
+                    messages.Append(DefaultExceptionDelimiter);
                 }
-                nestedException = nestedException.InnerException;
+
+                messages.Append(nested.Message);
+
+                // Read once. Exception.StackTrace formats the trace from scratch on every access, so
+                // testing it and then writing it walked and rebuilt the whole thing twice - on the
+                // largest field of the largest payload the sink produces.
+                string? stackTrace = nested.StackTrace;
+
+                if (stackTrace != null)
+                {
+                    if (stackTraces.Length > 0)
+                    {
+                        stackTraces.AppendLine();
+                        stackTraces.AppendLine(DefaultStackTraceDelimiter);
+                    }
+
+                    stackTraces.Append(stackTrace);
+                }
+
+                nested = nested.InnerException;
                 counter++;
             }
-            while (nestedException != null && counter < Options.StackTraceDepth);
-
-            string exceptionDetail = exceptionSb.ToString().Substring(0, exceptionSb.Length - DefaultExceptionDelimiter.Length).Trim();
-
-            if (stackSb.Length > 0)
-            {
-                stackDetail = stackSb.ToString().Substring(0, stackSb.Length - DefaultStackTraceDelimiter.Length - 2).Trim();
-            }
-
-            return new Tuple<string, string?>(exceptionDetail, stackDetail);
+            while (nested != null && counter < Options.StackTraceDepth);
         }
     }
 }

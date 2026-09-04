@@ -1,4 +1,4 @@
-﻿namespace TestApplication;
+namespace TestApplication;
 
 public class CustomException : Exception
 {

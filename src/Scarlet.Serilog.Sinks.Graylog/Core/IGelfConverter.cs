@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+using System.Text.Json;
 using Serilog.Events;
 
 namespace Scarlet.Serilog.Sinks.Graylog.Core;
@@ -13,9 +13,14 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core;
 public interface IGelfConverter
 {
     /// <summary>
-    /// Builds the GELF message for a log event.
+    /// Writes the GELF message for a log event.
     /// </summary>
     /// <param name="logEvent">The log event to convert.</param>
-    /// <returns>The GELF message, serialized to JSON by the caller.</returns>
-    JsonObject GetGelfJson(LogEvent logEvent);
+    /// <param name="writer">The writer the payload is written to.</param>
+    /// <remarks>
+    /// The implementation writes one complete JSON object, opening and closing it itself. The sink
+    /// flushes the writer and owns the buffer underneath it, so nothing written here may be retained
+    /// past the call.
+    /// </remarks>
+    void WriteGelfJson(LogEvent logEvent, Utf8JsonWriter writer);
 }

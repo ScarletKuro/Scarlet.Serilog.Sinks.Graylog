@@ -288,9 +288,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             var transport = new RecordingTransport();
 
             using (Logger logger = LoggerFor(transport, o => o.Message.JsonSerializerOptions = new JsonSerializerOptions
-                   {
-                       Converters = { new JsonStringEnumConverter() }
-                   }))
+            {
+                Converters = { new JsonStringEnumConverter() }
+            }))
             {
                 logger.Information("level {@payload}", new { Level = LogEventLevel.Warning });
             }
@@ -373,11 +373,13 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
                 try
                 {
                     throw new InvalidOperationException("Level One exception");
-                } catch (Exception inner)
+                }
+                catch (Exception inner)
                 {
                     throw new NotImplementedException("Nested Exception", inner);
                 }
-            } catch (Exception outer)
+            }
+            catch (Exception outer)
             {
                 return outer;
             }

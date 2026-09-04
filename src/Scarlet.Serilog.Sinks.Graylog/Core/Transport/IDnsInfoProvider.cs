@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Threading.Tasks;
 
 namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport;
@@ -8,13 +8,6 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 /// </summary>
 public interface IDnsInfoProvider
 {
-    /// <summary>
-    /// Gets the host addresses.
-    /// </summary>
-    /// <param name="hostNameOrAddress">The host name or address.</param>
-    /// <returns>Every address the name resolves to.</returns>
-    Task<IPAddress[]> GetHostAddresses(string hostNameOrAddress);
-
     /// <summary>
     /// Gets the single address a transport should connect to.
     /// </summary>

@@ -1,4 +1,4 @@
-﻿using Serilog.Debugging;
+using Serilog.Debugging;
 using System;
 using System.IO;
 using Scarlet.Serilog.Sinks.Graylog.Core.Helpers;
@@ -20,8 +20,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
     /// closes it so the next send reconnects. Sends are serialized, so one instance is safe to
     /// share - and has to be, because the frames share a single stream.
     /// </remarks>
-    /// <seealso cref="ITransportClient{T}" />
-    public class TcpTransportClient : ITransportClient<byte[]>
+    /// <seealso cref="ITransportClient" />
+    public class TcpTransportClient : ITransportClient
     {
         private Stream? _stream;
 
@@ -41,12 +41,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
         {
             _options = options;
             _dnsInfoProvider = dnsInfoProvider;
-
         }
 
-
         /// <inheritdoc />
-        public async Task Send(byte[] payload)
+        public async Task Send(ReadOnlyMemory<byte> payload)
         {
             await _sendLock.WaitAsync().ConfigureAwait(false);
             try
@@ -105,8 +103,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
 
                 if (!string.IsNullOrWhiteSpace(sslHost))
                 {
-                    var sslStream = new SslStream(stream, false,
-                        (sender, certificate, chain, errors) => ValidateServerCertificate(sender, certificate, chain, errors));
+                    var sslStream = new SslStream(stream, false, ValidateServerCertificate);
 
                     // Adopted before the handshake, so a failure below disposes it too.
                     stream = sslStream;
@@ -133,7 +130,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
                             sslStream.RemoteCertificate.Subject,
                             sslStream.RemoteCertificate.GetEffectiveDateString(),
                             sslStream.RemoteCertificate.GetExpirationDateString());
-                    } else
+                    }
+                    else
                     {
                         SelfLog.WriteLine("Remote certificate is null.");
                     }
@@ -199,14 +197,19 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
 #endif
         }
 
-        private async Task WriteWithTimeout(Stream stream, byte[] payload)
+        private async Task WriteWithTimeout(Stream stream, ReadOnlyMemory<byte> payload)
         {
+#if !NET
+            // No span-based stream API on this target, so the frame goes out as the array underneath
+            // it rather than being copied into another one.
+            ArraySegment<byte> segment = ByteBufferWriter.AsArraySegment(payload);
+#endif
             if (_options.WriteTimeout is not { } timeout)
             {
 #if NET
                 await stream.WriteAsync(payload).ConfigureAwait(false);
 #else
-                await stream.WriteAsync(payload, 0, payload.Length).ConfigureAwait(false);
+                await stream.WriteAsync(segment.Array!, segment.Offset, segment.Count).ConfigureAwait(false);
 #endif
                 await stream.FlushAsync().ConfigureAwait(false);
 
@@ -229,7 +232,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
                 throw new TimeoutException("The TCP write timed out.");
             }
 #else
-            await AwaitWithTimeout(stream.WriteAsync(payload, 0, payload.Length), timeout, "write").ConfigureAwait(false);
+            await AwaitWithTimeout(
+                stream.WriteAsync(segment.Array!, segment.Offset, segment.Count),
+                timeout,
+                "write").ConfigureAwait(false);
             await AwaitWithTimeout(stream.FlushAsync(), timeout, "flush").ConfigureAwait(false);
 #endif
         }
@@ -247,7 +253,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
         /// process on a .NET Framework application configured with
         /// <c>&lt;ThrowUnobservedTaskExceptions enabled="true"/&gt;</c>.
         /// </remarks>
-        private static async Task AwaitWithTimeout(Task operation, TimeSpan timeout, string operationName)
+        private static async Task AwaitWithTimeout(
+            Task operation,
+            TimeSpan timeout,
+            string operationName)
         {
             using var timeoutSource = new CancellationTokenSource();
 
@@ -256,7 +265,6 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
             if (await Task.WhenAny(operation, delay).ConfigureAwait(false) != operation)
             {
                 Observe(operation);
-
                 throw new TimeoutException($"The TCP {operationName} timed out.");
             }
 
@@ -276,6 +284,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
                 TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default);
         }
+
 #endif
 
         private void CloseConnection()
