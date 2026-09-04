@@ -5,7 +5,12 @@
 # an empty index. Do not copy this as a deployment example.
 #
 #   docker compose -f tests/integration/docker-compose.yml up -d --wait
-#   dotnet test scarlet-serilog-sinks-graylog.slnx -- --filter-trait "Category=Integration"
+#   dotnet test tests/Scarlet.Serilog.Sinks.Graylog.Tests/Scarlet.Serilog.Sinks.Graylog.Tests.csproj \
+#     -f net10.0 -- --filter-trait "Category=Integration"
+#
+# Pin one framework: the project multi-targets, and two runners against one server both create the
+# inputs. That race is handled, but running it twice only makes the run slower.
+#
 #   docker compose -f tests/integration/docker-compose.yml down -v
 services:
   mongodb:
@@ -62,12 +67,17 @@ services:
       # and every one of them would otherwise wait out the flush.
       - GRAYLOG_OUTPUT_BATCH_SIZE=1
       - GRAYLOG_OUTPUT_FLUSH_INTERVAL=1
+    volumes:
+      # The TLS test writes a freshly generated certificate here before it creates the input
+      # that reads it, so no private key is ever committed. Read-only: only the test writes.
+      - ./certs:/etc/graylog/certs:ro
     ports:
       - "9000:9000"
-      # The inputs the test fixture creates. GELF over UDP, TCP and HTTP in that order.
+      # The inputs the test fixture creates: GELF over UDP, TCP, HTTP, then TCP with TLS.
       - "12201:12201/udp"
       - "12202:12202"
       - "12203:12203"
+      - "12204:12204"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:9000/api/system/lbstatus | grep -q ALIVE"]
       interval: 10s

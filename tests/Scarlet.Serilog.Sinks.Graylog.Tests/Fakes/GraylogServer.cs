@@ -115,13 +115,59 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Fakes
         /// bound its port - a message sent in between is simply lost, which would show up as a flaky
         /// test rather than as the setup race it is.
         /// </remarks>
-        public async Task EnsureInput(string type, int port, CancellationToken cancellationToken)
+        public Task EnsureInput(string type, int port, CancellationToken cancellationToken)
         {
-            string? inputId = await FindInput(type, port, cancellationToken).ConfigureAwait(false);
+            return EnsureInput(type, port, configure: null, cancellationToken);
+        }
 
-            inputId ??= await CreateInput(type, port, cancellationToken).ConfigureAwait(false);
+        /// <summary>
+        /// As above, with <paramref name="configure"/> adding to the input configuration - TLS, for the
+        /// input the TLS test sends to.
+        /// </summary>
+        public async Task EnsureInput(string type, int port, Action<JsonObject>? configure, CancellationToken cancellationToken)
+        {
+            // Two runners against one fresh server both find nothing and both create an input on the
+            // same port; only one binds it, and the loser's tests then skip on a server that is in
+            // fact working. Whoever loses drops the input it created and adopts the one that started.
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                string? existing = await FindInput(type, port, cancellationToken).ConfigureAwait(false);
 
-            await WaitUntilInputIsRunning(inputId, cancellationToken).ConfigureAwait(false);
+                if (existing != null)
+                {
+                    if (await TryWaitUntilInputIsRunning(existing, TimeSpan.FromSeconds(60), cancellationToken).ConfigureAwait(false))
+                    {
+                        return;
+                    }
+
+                    // Somebody else's input holds the port and is not starting. Nothing to adopt and
+                    // nothing to clean up, so this is fatal.
+                    throw new TimeoutException($"The Graylog {type} input on port {port} did not start.");
+                }
+
+                string created = await CreateInput(type, port, configure, cancellationToken).ConfigureAwait(false);
+
+                if (await TryWaitUntilInputIsRunning(created, TimeSpan.FromSeconds(20), cancellationToken).ConfigureAwait(false))
+                {
+                    return;
+                }
+
+                // Lost the race: the port belongs to a competing input. Remove the duplicate so the
+                // server is not left with two inputs fighting over one port, then look again.
+                await DeleteInput(created, cancellationToken).ConfigureAwait(false);
+            }
+
+            throw new TimeoutException($"No Graylog {type} input could be started on port {port}.");
+        }
+
+        private async Task DeleteInput(string inputId, CancellationToken cancellationToken)
+        {
+            using HttpResponseMessage response = await _client.DeleteAsync($"api/system/inputs/{inputId}", cancellationToken)
+                                                              .ConfigureAwait(false);
+
+            // Best effort: the input is already useless, and failing the run over the cleanup of a
+            // duplicate would replace a recoverable race with an unrecoverable one.
+            _ = response;
         }
 
         private async Task<string?> FindInput(string type, int port, CancellationToken cancellationToken)
@@ -145,7 +191,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Fakes
             return null;
         }
 
-        private async Task<string> CreateInput(string type, int port, CancellationToken cancellationToken)
+        private async Task<string> CreateInput(string type, int port, Action<JsonObject>? configure, CancellationToken cancellationToken)
         {
             var configuration = new JsonObject
             {
@@ -174,6 +220,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Fakes
                 configuration["enable_cors"] = true;
                 configuration["tls_enable"] = false;
             }
+            // Last, so a caller can turn on what the defaults above turned off - TLS, in particular.
+            configure?.Invoke(configuration);
 
             var request = new JsonObject
             {
@@ -189,9 +237,13 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Fakes
                    ?? throw new InvalidOperationException($"Graylog created an input of type {type} without reporting its id.");
         }
 
-        private async Task WaitUntilInputIsRunning(string inputId, CancellationToken cancellationToken)
+        /// <summary>
+        /// Waits for an input to reach RUNNING, reporting whether it got there rather than throwing:
+        /// an input that never starts is how a lost create race looks, and that is recoverable.
+        /// </summary>
+        private async Task<bool> TryWaitUntilInputIsRunning(string inputId, TimeSpan timeout, CancellationToken cancellationToken)
         {
-            DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(60);
+            DateTime deadline = DateTime.UtcNow + timeout;
 
             while (DateTime.UtcNow < deadline)
             {
@@ -203,14 +255,14 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Fakes
                         candidate["id"]?.GetValue<string>() == inputId &&
                         candidate["state"]?.GetValue<string>() == "RUNNING")
                     {
-                        return;
+                        return true;
                     }
                 }
 
                 await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
             }
 
-            throw new TimeoutException($"The Graylog input {inputId} did not start.");
+            return false;
         }
 
         /// <summary>

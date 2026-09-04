@@ -229,7 +229,9 @@ underscore — relevant mainly to dictionary keys, which can be arbitrary string
 cosmetic: Graylog validates the name and **drops a field whose name contains anything else**, so an
 unsanitized key such as `k8s:pod` would lose its value entirely.
 
-Graylog strips the leading underscore again on the way in, so `_UserId` is searchable as `UserId`.
+Graylog strips the leading underscore again on the way in, so `_UserId` is searchable as `UserId`,
+and it replaces dots with underscores, because a dot means object nesting to the search backend —
+the sink flattens a destructured object as `_user.name`, which arrives searchable as `user_name`.
 That means a property whose name collides with a field Graylog sets itself is silently discarded, so
 the sink appends an underscore to those: `message`, `source`, `timestamp`, `level`, `host`,
 `full_message`, anything starting with `gl2_`, and `id` (which the GELF spec reserves outright).

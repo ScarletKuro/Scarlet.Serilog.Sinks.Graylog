@@ -1,0 +1,4 @@
+# The TLS integration test writes its self-signed certificate here at run time and Graylog reads it
+# through a bind mount. Nothing in here is committed - a private key in the repository, however
+# throwaway, is a secret-scanner incident waiting to happen.
+*.pem

@@ -125,7 +125,7 @@ jobs:
           dotnet test tests/Scarlet.Serilog.Sinks.Graylog.Tests/Scarlet.Serilog.Sinks.Graylog.Tests.csproj
           -c Release -f net10.0 --
           --filter-trait "Category=Integration"
-          --minimum-expected-tests 7
+          --minimum-expected-tests 12
 
       - name: Graylog logs
         if: failure()

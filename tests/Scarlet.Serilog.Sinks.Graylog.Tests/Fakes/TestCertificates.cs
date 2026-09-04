@@ -95,6 +95,49 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Fakes
             return new PfxFile(path, password: null, subject: string.Empty, thumbprint: string.Empty);
         }
 
+        /// <summary>
+        /// Writes <paramref name="certificate"/> and its private key as the PEM pair Graylog wants for
+        /// a TLS input, into <paramref name="directory"/>.
+        /// </summary>
+        /// <remarks>
+        /// Written at run time rather than committed: a private key in the repository, however
+        /// throwaway, is a secret-scanner incident waiting to happen. Graylog reads these through the
+        /// bind mount in <c>tests/integration/docker-compose.yml</c>.
+        /// </remarks>
+        public static PemPair WritePem(X509Certificate2 certificate, string directory)
+        {
+            Directory.CreateDirectory(directory);
+
+            string certificatePath = Path.Combine(directory, "graylog.pem");
+            string keyPath = Path.Combine(directory, "graylog-key.pem");
+
+            using RSA key = certificate.GetRSAPrivateKey()
+                                       ?? throw new InvalidOperationException("The test certificate carries no RSA private key.");
+
+            File.WriteAllText(certificatePath, certificate.ExportCertificatePem());
+            // PKCS#8, unencrypted: what Graylog expects when tls_key_password is empty.
+            File.WriteAllText(keyPath, key.ExportPkcs8PrivateKeyPem());
+
+            return new PemPair(certificatePath, keyPath, certificate.Thumbprint);
+        }
+
+        /// <summary>A certificate and key on disk, and the thumbprint a client can pin to.</summary>
+        internal sealed class PemPair
+        {
+            public PemPair(string certificatePath, string keyPath, string thumbprint)
+            {
+                CertificatePath = certificatePath;
+                KeyPath = keyPath;
+                Thumbprint = thumbprint;
+            }
+
+            public string CertificatePath { get; }
+
+            public string KeyPath { get; }
+
+            public string Thumbprint { get; }
+        }
+
         public static X509Certificate2 LoadPkcs12(byte[] data, string? password)
         {
 #if NET9_0_OR_GREATER

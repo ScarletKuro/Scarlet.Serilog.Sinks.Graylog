@@ -1,5 +1,7 @@
 using Scarlet.Serilog.Sinks.Graylog.Tests.Fakes;
 using System;
+using System.IO;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -21,6 +23,64 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         private GraylogServer? _server;
         private string? _unavailable;
 
+        /// <summary>
+        /// The thumbprint of the certificate the TLS input presents, for a client to pin to. The
+        /// platform does not trust a self-signed certificate, and a client that accepted any
+        /// certificate would pass against the wrong server just as happily.
+        /// </summary>
+        internal string? TlsThumbprint { get; private set; }
+
+        /// <summary>
+        /// Generates the certificate the TLS input serves, writes it where the compose file mounts it,
+        /// and creates the input that reads it.
+        /// </summary>
+        /// <remarks>
+        /// The paths differ across the bind mount: the test writes to <c>tests/integration/certs</c> on
+        /// the host, Graylog reads <c>/etc/graylog/certs</c> inside the container.
+        /// </remarks>
+        private static async Task<string> EnsureTlsInput(GraylogServer server)
+        {
+            using X509Certificate2 certificate = TestCertificates.CreateSelfSigned();
+            TestCertificates.PemPair pem = TestCertificates.WritePem(certificate, HostCertificateDirectory());
+
+            await server.EnsureInput(
+                GraylogServer.TcpInputType,
+                12204,
+                configuration =>
+                {
+                    configuration["tls_enable"] = true;
+                    configuration["tls_cert_file"] = "/etc/graylog/certs/" + Path.GetFileName(pem.CertificatePath);
+                    configuration["tls_key_file"] = "/etc/graylog/certs/" + Path.GetFileName(pem.KeyPath);
+                    configuration["tls_key_password"] = string.Empty;
+                },
+                CancellationToken.None).ConfigureAwait(false);
+
+            return pem.Thumbprint;
+        }
+
+        /// <summary>
+        /// Finds <c>tests/integration/certs</c> by walking up from the test binary, which is the only
+        /// fixed relationship between the two - the working directory is not one.
+        /// </summary>
+        private static string HostCertificateDirectory()
+        {
+            var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+            while (directory != null)
+            {
+                string candidate = Path.Combine(directory.FullName, "tests", "integration", "certs");
+
+                if (Directory.Exists(candidate))
+                {
+                    return candidate;
+                }
+
+                directory = directory.Parent;
+            }
+
+            throw new DirectoryNotFoundException("tests/integration/certs is not above the test binary.");
+        }
+
         public async ValueTask InitializeAsync()
         {
             try
@@ -38,6 +98,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
                 await _server.EnsureInput(GraylogServer.UdpInputType, 12201, CancellationToken.None).ConfigureAwait(false);
                 await _server.EnsureInput(GraylogServer.TcpInputType, 12202, CancellationToken.None).ConfigureAwait(false);
                 await _server.EnsureInput(GraylogServer.HttpInputType, 12203, CancellationToken.None).ConfigureAwait(false);
+
+                TlsThumbprint = await EnsureTlsInput(_server).ConfigureAwait(false);
             }
             catch (Exception exception)
             {
