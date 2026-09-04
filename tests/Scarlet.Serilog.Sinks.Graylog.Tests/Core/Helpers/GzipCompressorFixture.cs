@@ -90,6 +90,32 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Helpers
             Assert.Equal(incompressible, output.ToArray());
         }
 
+        [Fact]
+        public void BufferWriterStream_ImplementsTheWriteOnlyStreamContract()
+        {
+            var buffer = new ByteBufferWriter();
+            using Stream target = new GzipCompressor.BufferWriterStream(buffer);
+
+            Assert.False(target.CanRead);
+            Assert.False(target.CanSeek);
+            Assert.True(target.CanWrite);
+            Assert.Equal(0, target.Length);
+            Assert.Equal(0, target.Position);
+
+            target.Write(new byte[] { 1, 2, 3 }, 1, 2);
+            target.Write(new byte[] { 4, 5 });
+            target.WriteByte(6);
+            target.Flush();
+
+            Assert.Equal(5, target.Length);
+            Assert.Equal(5, target.Position);
+            Assert.Equal(new byte[] { 2, 3, 4, 5, 6 }, buffer.WrittenSpan.ToArray());
+            Assert.Throws<NotSupportedException>(() => target.Position = 0);
+            Assert.Throws<NotSupportedException>(() => target.Read(new byte[1], 0, 1));
+            Assert.Throws<NotSupportedException>(() => target.Seek(0, SeekOrigin.Begin));
+            Assert.Throws<NotSupportedException>(() => target.SetLength(0));
+        }
+
         private static byte[] Compress(string source)
         {
             var destination = new ByteBufferWriter();

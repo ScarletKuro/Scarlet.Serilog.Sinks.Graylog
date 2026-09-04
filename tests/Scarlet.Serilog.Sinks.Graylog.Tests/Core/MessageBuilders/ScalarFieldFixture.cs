@@ -150,6 +150,24 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
         }
 
         [Fact]
+        public void Build_RepeatedUnsupportedType_UsesTheCachedReflectionFreePath()
+        {
+            GelfMessageBuilder messageBuilder = new("localhost", OptionsWith(new JsonSerializerOptions()));
+
+            Assert.Equal("123", FieldJson(messageBuilder, (IntPtr)123));
+            Assert.Equal("456", FieldJson(messageBuilder, (IntPtr)456));
+        }
+
+        [Fact]
+        public void Build_RepeatedTypeWithoutAContract_UsesTheCachedReflectionFreePath()
+        {
+            GelfMessageBuilder messageBuilder = new("localhost", OptionsWith(NoContracts()));
+
+            Assert.Equal("\"first\"", FieldJson(messageBuilder, new Unknown("first")));
+            Assert.Equal("\"second\"", FieldJson(messageBuilder, new Unknown("second")));
+        }
+
+        [Fact]
         public void Build_MemberInfo_IsWrittenAsItsSignature()
         {
             GelfMessageBuilder messageBuilder = new("localhost", OptionsWith(new JsonSerializerOptions()));
@@ -332,7 +350,14 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
         /// </summary>
         private sealed class Unknown
         {
-            public override string ToString() => "unknown-value";
+            private readonly string _value;
+
+            public Unknown(string value = "unknown-value")
+            {
+                _value = value;
+            }
+
+            public override string ToString() => _value;
         }
 
         private enum ByteEnum : byte

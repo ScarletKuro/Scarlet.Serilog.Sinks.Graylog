@@ -41,7 +41,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
         /// A write-only <see cref="Stream"/> over a <see cref="ByteBufferWriter"/>, so a stream-based
         /// compressor can produce its output without an intermediate array.
         /// </summary>
-        private sealed class BufferWriterStream : Stream
+        internal sealed class BufferWriterStream : Stream
         {
             private readonly ByteBufferWriter _buffer;
 
