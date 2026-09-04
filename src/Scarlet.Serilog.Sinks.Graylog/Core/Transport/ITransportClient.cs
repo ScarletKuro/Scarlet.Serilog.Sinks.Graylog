@@ -12,10 +12,6 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport
         /// Sends the specified payload.
         /// </summary>
         /// <param name="payload">The bytes to put on the wire.</param>
-        /// <remarks>
-        /// <paramref name="payload"/> is only valid until the returned task completes; see
-        /// <see cref="ITransport.Send"/>.
-        /// </remarks>
         Task Send(ReadOnlyMemory<byte> payload);
     }
 }

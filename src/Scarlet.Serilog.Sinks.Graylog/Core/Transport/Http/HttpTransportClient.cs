@@ -252,7 +252,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
             // The payload is already UTF-8, so it is posted as bytes over the buffer the sink filled.
             // StringContent would have transcoded a string the sink had transcoded from UTF-8 in the
             // first place, and allocated the whole message again to do it.
-            ArraySegment<byte> segment = Helpers.PooledByteBuffer.AsArraySegment(message);
+            ArraySegment<byte> segment = Helpers.ByteBufferWriter.AsArraySegment(message);
 
             using var content = new ByteArrayContent(segment.Array!, segment.Offset, segment.Count);
 

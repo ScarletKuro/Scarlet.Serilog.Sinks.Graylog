@@ -260,17 +260,6 @@ survives:
 If events can be large, prefer TCP or UDP over HTTP, and keep individual property values well under
 32 KB.
 
-### Payload buffers
-
-Each event's GELF payload is written into a byte array rented from `ArrayPool<byte>.Shared` and
-returned without being cleared once the send finishes. This is the pool's normal behavior, but code
-elsewhere in the same process that rents from the shared pool may observe bytes left by an earlier
-log event.
-
-A custom `ITransport` must be finished with the payload when its task completes — in any terminal
-state, including faulted or cancelled. The next event may reuse the buffer immediately; copy the
-payload if it is needed for longer.
-
 ## Batching
 
 Events are written as they are emitted by default. Set `GraylogSinkOptions.Delivery.Batching` to buffer them
@@ -299,8 +288,8 @@ default; `null` opts out of waiting). On `net8.0` and later the sink also implem
 `IAsyncDisposable`, so `await Log.CloseAndFlushAsync()` drains it without blocking a thread.
 
 **Nothing bounds how many of those unbatched sends can be outstanding.** Each transport sends one
-event at a time, so an unreachable or slow Graylog means the sends — and the payload buffer each one
-is holding — pile up for as long as events keep arriving, with no queue limit and no back-pressure.
+event at a time, so an unreachable or slow Graylog means the sends — and each event's serialized
+payload — pile up for as long as events keep arriving, with no queue limit and no back-pressure.
 Batching is what puts a ceiling on it: past `QueueLimit` events are dropped instead of accumulating.
 Prefer batching for anything high-volume.
 

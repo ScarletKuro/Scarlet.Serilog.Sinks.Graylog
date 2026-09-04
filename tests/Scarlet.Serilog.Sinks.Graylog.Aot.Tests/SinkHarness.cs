@@ -69,10 +69,6 @@ namespace Scarlet.Serilog.Sinks.Graylog.Aot.Tests
     {
         public List<string> Payloads { get; } = new List<string>();
 
-        /// <remarks>
-        /// Decoded on the spot: the sink returns its pooled payload buffer once this task completes,
-        /// so holding the memory would mean reading whatever the next event wrote there.
-        /// </remarks>
         public Task Send(ReadOnlyMemory<byte> payload)
         {
             Payloads.Add(Encoding.UTF8.GetString(payload.ToArray()));

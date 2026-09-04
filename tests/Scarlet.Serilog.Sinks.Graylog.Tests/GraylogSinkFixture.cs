@@ -23,7 +23,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
     public class GraylogSinkFixture
     {
         [Fact]
-        public void Emit_KeepsEachPayloadAliveUntilItsSendCompletes()
+        public void Emit_GivesConcurrentSendsIndependentPayloads()
         {
             var transport = new DeferredReadingTransport();
             var options = new GraylogSinkOptions

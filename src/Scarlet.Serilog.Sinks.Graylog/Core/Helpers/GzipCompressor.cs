@@ -5,7 +5,7 @@ using System.IO.Compression;
 namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
 {
     /// <summary>
-    /// Gzip-compresses a GELF payload into a pooled buffer.
+    /// Gzip-compresses a GELF payload into a growable byte buffer.
     /// </summary>
     /// <remarks>
     /// This runs on every compressed UDP event. It used to take the payload as a
@@ -19,9 +19,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
     /// </remarks>
     internal static class GzipCompressor
     {
-        public static void Compress(ReadOnlyMemory<byte> source, PooledByteBuffer destination)
+        public static void Compress(ReadOnlyMemory<byte> source, ByteBufferWriter destination)
         {
-            using var target = new PooledBufferStream(destination);
+            using var target = new BufferWriterStream(destination);
 
             // leaveOpen, so each stream is owned and disposed exactly once, and the gzip stream is
             // closed first - its trailer is only written when it is.
@@ -30,7 +30,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
 #if NET
                 gzip.Write(source.Span);
 #else
-                ArraySegment<byte> segment = PooledByteBuffer.AsArraySegment(source);
+                ArraySegment<byte> segment = ByteBufferWriter.AsArraySegment(source);
 
                 gzip.Write(segment.Array!, segment.Offset, segment.Count);
 #endif
@@ -38,14 +38,14 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
         }
 
         /// <summary>
-        /// A write-only <see cref="Stream"/> over a <see cref="PooledByteBuffer"/>, so a stream-based
+        /// A write-only <see cref="Stream"/> over a <see cref="ByteBufferWriter"/>, so a stream-based
         /// compressor can produce its output without an intermediate array.
         /// </summary>
-        private sealed class PooledBufferStream : Stream
+        private sealed class BufferWriterStream : Stream
         {
-            private readonly PooledByteBuffer _buffer;
+            private readonly ByteBufferWriter _buffer;
 
-            public PooledBufferStream(PooledByteBuffer buffer)
+            public BufferWriterStream(ByteBufferWriter buffer)
             {
                 _buffer = buffer;
             }

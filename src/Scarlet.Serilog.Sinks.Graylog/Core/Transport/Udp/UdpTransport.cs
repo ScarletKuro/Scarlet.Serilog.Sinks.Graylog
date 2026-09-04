@@ -41,7 +41,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
                 return;
             }
 
-            using var compressed = new PooledByteBuffer(message.Length);
+            var compressed = new ByteBufferWriter(message.Length);
 
             GzipCompressor.Compress(message, compressed);
 

@@ -160,7 +160,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
                 // No span-based socket API on this target, and UdpClient.SendAsync always sends from
                 // the start of the array - so the payload can only go out uncopied when it is not an
                 // offset slice, which is the case for every buffer the sink itself produces.
-                ArraySegment<byte> segment = Helpers.PooledByteBuffer.AsArraySegment(payload);
+                ArraySegment<byte> segment = Helpers.ByteBufferWriter.AsArraySegment(payload);
                 byte[] datagram = segment.Offset == 0 ? segment.Array! : payload.ToArray();
 
                 await client.SendAsync(datagram, payload.Length, endpoint).ConfigureAwait(false);

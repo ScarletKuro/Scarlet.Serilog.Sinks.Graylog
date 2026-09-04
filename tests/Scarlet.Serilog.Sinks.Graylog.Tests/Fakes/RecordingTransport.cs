@@ -53,11 +53,6 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Fakes
         /// <summary>
         /// Records the payload as text.
         /// </summary>
-        /// <remarks>
-        /// Decoded immediately, and deliberately not held as a <see cref="ReadOnlyMemory{T}"/>: the
-        /// sink hands its pooled payload buffer back once this task completes, so anything kept past
-        /// the call would read whatever the next event wrote there.
-        /// </remarks>
         public async Task Send(ReadOnlyMemory<byte> payload)
         {
             string message = Encoding.UTF8.GetString(payload.ToArray());

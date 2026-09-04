@@ -3,7 +3,6 @@ using Serilog.Events;
 using Serilog.Parsing;
 using Scarlet.Serilog.Sinks.Graylog.Core.Helpers;
 using Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders;
-using System.Buffers;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -73,24 +72,10 @@ public class MessageBuildingBenchmarks
         return json.ToJsonString(_options).Length;
     }
 
-    [Benchmark(Description = "Streaming Utf8JsonWriter with an allocated buffer")]
+    [Benchmark(Description = "Streaming Utf8JsonWriter with the production buffer")]
     public int StreamingUtf8()
     {
-        var buffer = new ArrayBufferWriter<byte>();
-
-        using (var writer = new Utf8JsonWriter(buffer))
-        {
-            _builder.Build(_event, writer);
-            writer.Flush();
-        }
-
-        return buffer.WrittenCount;
-    }
-
-    [Benchmark(Description = "Streaming Utf8JsonWriter with an ArrayPool buffer")]
-    public int StreamingUtf8PooledBuffer()
-    {
-        using var buffer = new PooledByteBuffer();
+        var buffer = new ByteBufferWriter();
 
         using (var writer = new Utf8JsonWriter(buffer))
         {

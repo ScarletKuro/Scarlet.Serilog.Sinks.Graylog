@@ -190,58 +190,21 @@ namespace Scarlet.Serilog.Sinks.Graylog
         /// Writes the GELF payload for an event and starts its send.
         /// </summary>
         /// <remarks>
-        /// The payload buffer belongs to the sink and is handed back to the pool once the send has
-        /// finished with it - not when this method returns, since <see cref="Emit"/> does not wait for
-        /// the send. That is also why <see cref="ITransport.Send"/> documents the memory as valid only
-        /// until its task completes: a transport that squirrels the payload away would find it
-        /// overwritten by the next event. That holds for a send that failed as much as one that
-        /// succeeded - a task in any terminal state means the transport is done with the memory, which
-        /// is the contract every <c>Memory&lt;T&gt;</c>-taking asynchronous API works to - so the buffer
-        /// goes back to the pool either way rather than being thrown away on the failure path.
+        /// Each event gets its own ordinary byte array. Keeping it immutable after writing lets an
+        /// asynchronous transport retain the supplied <see cref="ReadOnlyMemory{T}"/> safely, without
+        /// coordinating ownership with a shared array pool.
         /// </remarks>
         private Task SendAsync(LogEvent logEvent)
         {
-            var payload = new PooledByteBuffer();
+            var payload = new ByteBufferWriter();
 
-            try
+            using (var writer = new Utf8JsonWriter(payload, _writerOptions))
             {
-                // A block rather than a using declaration on purpose: the writer has to be flushed and
-                // done with the buffer before the send starts, not at the end of this method.
-                using (var writer = new Utf8JsonWriter(payload, _writerOptions))
-                {
-                    _converter.Value.WriteGelfJson(logEvent, writer);
-                    writer.Flush();
-                }
-
-                Task send = _transport.Value.Send(payload.WrittenMemory);
-
-                if (send.IsCompleted)
-                {
-                    payload.Dispose();
-
-                    return send;
-                }
-
-                return ReleaseWhenSent(send, payload);
+                _converter.Value.WriteGelfJson(logEvent, writer);
+                writer.Flush();
             }
-            catch
-            {
-                payload.Dispose();
 
-                throw;
-            }
-        }
-
-        private static async Task ReleaseWhenSent(Task send, PooledByteBuffer payload)
-        {
-            try
-            {
-                await send.ConfigureAwait(false);
-            }
-            finally
-            {
-                payload.Dispose();
-            }
+            return _transport.Value.Send(payload.WrittenMemory);
         }
 
         /// <summary>

@@ -1,6 +1,5 @@
 using Scarlet.Serilog.Sinks.Graylog.Core.Helpers;
 using System;
-using System.Buffers;
 using System.IO;
 using System.IO.Compression;
 using System.Text;
@@ -14,7 +13,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Helpers
     /// <remarks>
     /// These moved off <c>StringExtensions.ToGzip</c>, which took the payload as a string and
     /// encoded it here. Payloads reach the transports as UTF-8 now, so the compressor takes bytes
-    /// and writes into the caller's pooled buffer.
+    /// and writes into the caller's growable byte buffer.
     /// </remarks>
     public class GzipCompressorFixture
     {
@@ -43,19 +42,13 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Helpers
         }
 
         /// <summary>
-        /// The destination buffer comes from the shared pool, so it arrives dirty and oversized. Only
-        /// the bytes the compressed payload actually occupies may be handed on.
+        /// The destination normally has spare capacity. Only the bytes the compressed payload
+        /// actually occupies may be handed on.
         /// </summary>
         [Fact]
-        public void Compress_WithADirtyPooledBuffer_YieldsOnlyThePayload()
+        public void Compress_ExposesOnlyTheCompressedPayload()
         {
             string given = new string('x', 5000) + " end";
-            byte[] source = Encoding.UTF8.GetBytes(given);
-
-            // Dirty the buffer the rent inside the compressor is about to be handed.
-            byte[] dirty = ArrayPool<byte>.Shared.Rent(source.Length);
-            dirty.AsSpan().Fill(0xAB);
-            ArrayPool<byte>.Shared.Return(dirty);
 
             Assert.Equal(given, Decompress(Compress(given)));
         }
@@ -80,7 +73,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Helpers
 
             random.NextBytes(incompressible);
 
-            using var destination = new PooledByteBuffer(1);
+            var destination = new ByteBufferWriter(1);
 
             GzipCompressor.Compress(incompressible, destination);
 
@@ -99,7 +92,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Helpers
 
         private static byte[] Compress(string source)
         {
-            using var destination = new PooledByteBuffer();
+            var destination = new ByteBufferWriter();
 
             GzipCompressor.Compress(Encoding.UTF8.GetBytes(source), destination);
 

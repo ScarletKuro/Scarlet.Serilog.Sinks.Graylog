@@ -201,8 +201,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
         {
 #if !NET
             // No span-based stream API on this target, so the frame goes out as the array underneath
-            // it - which is the pooled buffer the transport just filled, not a copy of it.
-            ArraySegment<byte> segment = Helpers.PooledByteBuffer.AsArraySegment(payload);
+            // it rather than being copied into another one.
+            ArraySegment<byte> segment = ByteBufferWriter.AsArraySegment(payload);
 #endif
             if (_options.WriteTimeout is not { } timeout)
             {
@@ -235,8 +235,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
             await AwaitWithTimeout(
                 stream.WriteAsync(segment.Array!, segment.Offset, segment.Count),
                 timeout,
-                "write",
-                abandonedWriteOnTimeout: true).ConfigureAwait(false);
+                "write").ConfigureAwait(false);
             await AwaitWithTimeout(stream.FlushAsync(), timeout, "flush").ConfigureAwait(false);
 #endif
         }
@@ -257,8 +256,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
         private static async Task AwaitWithTimeout(
             Task operation,
             TimeSpan timeout,
-            string operationName,
-            bool abandonedWriteOnTimeout = false)
+            string operationName)
         {
             using var timeoutSource = new CancellationTokenSource();
 
@@ -267,12 +265,6 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
             if (await Task.WhenAny(operation, delay).ConfigureAwait(false) != operation)
             {
                 Observe(operation);
-
-                if (abandonedWriteOnTimeout)
-                {
-                    throw new AbandonedTcpWriteException();
-                }
-
                 throw new TimeoutException($"The TCP {operationName} timed out.");
             }
 
@@ -293,17 +285,6 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
                 TaskScheduler.Default);
         }
 
-        /// <summary>
-        /// A legacy stream write timed out while the underlying operation may still be reading its
-        /// caller-owned buffer.
-        /// </summary>
-        internal sealed class AbandonedTcpWriteException : TimeoutException
-        {
-            public AbandonedTcpWriteException()
-                : base("The TCP write timed out.")
-            {
-            }
-        }
 #endif
 
         private void CloseConnection()

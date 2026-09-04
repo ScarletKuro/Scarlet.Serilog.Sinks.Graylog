@@ -7,7 +7,6 @@ dotnet run -c Release --project benchmarks/Scarlet.Serilog.Sinks.Graylog.Benchma
 ```
 
 The baseline reproduces the former `JsonObject`/`JsonNode` pipeline for representative scalar
-events. The comparisons write the same event directly with the production `GelfMessageBuilder` and
-`Utf8JsonWriter`, first with a normal allocated buffer and then with the production
-`ArrayPool<byte>` buffer. Keep all three cases when changing the hot path so performance claims
-remain reproducible rather than living only in commit messages or comments.
+events. The comparison writes the same event directly with the production `GelfMessageBuilder`,
+`Utf8JsonWriter`, and normally allocated growable buffer. Keep both cases when changing the hot path
+so performance claims remain reproducible rather than living only in commit messages or comments.
