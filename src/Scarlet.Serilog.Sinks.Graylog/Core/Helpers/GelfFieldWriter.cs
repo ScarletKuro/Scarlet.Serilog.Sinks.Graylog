@@ -9,12 +9,18 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
     /// </summary>
     public sealed class GelfFieldWriter
     {
-        private readonly HashSet<string> _written = new HashSet<string>(StringComparer.Ordinal);
+        private readonly HashSet<string> _written;
 
-        internal GelfFieldWriter(Utf8JsonWriter writer, ScalarJsonWriter scalars)
+        internal GelfFieldWriter(Utf8JsonWriter writer, ScalarJsonWriter scalars, int expectedFieldCount = 0)
         {
             Writer = writer ?? throw new ArgumentNullException(nameof(writer));
             Scalars = scalars ?? throw new ArgumentNullException(nameof(scalars));
+#if NET
+            _written = new HashSet<string>(expectedFieldCount, StringComparer.Ordinal);
+#else
+            // The capacity-taking constructor is unavailable on the older target frameworks.
+            _written = new HashSet<string>(StringComparer.Ordinal);
+#endif
         }
 
         /// <summary>The writer for the complete GELF object.</summary>

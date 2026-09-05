@@ -90,7 +90,21 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
                 throw new ArgumentNullException(nameof(writer));
             }
 
-            var fields = new GelfFieldWriter(writer, _scalarJsonWriter);
+            // Every event writes _stringLevel; reserve the optional top-level fields as well as the
+            // properties so the duplicate-name set does not repeatedly grow on larger events.
+            int expectedFieldCount = logEvent.Properties.Count + 1;
+
+            if (Options.Facility != null)
+            {
+                expectedFieldCount++;
+            }
+
+            if (Options.IncludeMessageTemplate)
+            {
+                expectedFieldCount++;
+            }
+
+            var fields = new GelfFieldWriter(writer, _scalarJsonWriter, expectedFieldCount);
 
             writer.WriteStartObject();
             WriteCoreFields(logEvent, fields);

@@ -39,7 +39,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
                 return SendDatagrams(message);
             }
 
-            var compressed = new ByteBufferWriter(message.Length);
+            // Most compressed log events fit in one datagram. Reserving beyond that up front retains
+            // unused space during the asynchronous send for the messages that benefit most from gzip.
+            var compressed = new ByteBufferWriter(Math.Min(message.Length, _options.MaximumDatagramSize));
 
             GzipCompressor.Compress(message, compressed);
 
@@ -59,15 +61,18 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
         /// concurrently; all Task.WhenAll added was a task array and a LINQ pipeline per event.
         /// </para>
         /// </remarks>
-        private async Task SendDatagrams(ReadOnlyMemory<byte> payload)
+        private Task SendDatagrams(ReadOnlyMemory<byte> payload)
         {
             if (payload.Length <= _options.MaximumDatagramSize)
             {
-                await _transportClient.Send(payload).ConfigureAwait(false);
-
-                return;
+                return _transportClient.Send(payload);
             }
 
+            return SendChunks(payload);
+        }
+
+        private async Task SendChunks(ReadOnlyMemory<byte> payload)
+        {
             IReadOnlyList<byte[]> chunks = _chunkConverter.ConvertToChunks(payload);
 
             for (int i = 0; i < chunks.Count; i++)

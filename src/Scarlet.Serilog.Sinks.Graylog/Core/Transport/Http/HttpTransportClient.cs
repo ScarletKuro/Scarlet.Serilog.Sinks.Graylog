@@ -4,7 +4,6 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography.X509Certificates;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -22,6 +21,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
     public class HttpTransportClient : ITransportClient
     {
         private const string DefaultHttpUriPath = "gelf";
+        private const string JsonContentType = "application/json; charset=utf-8";
 
         private readonly Lazy<HttpClient> _httpClient;
 
@@ -256,10 +256,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Http
 
             using var content = new ByteArrayContent(segment.Array!, segment.Offset, segment.Count);
 
-            content.Headers.ContentType = new MediaTypeHeaderValue("application/json")
-            {
-                CharSet = Encoding.UTF8.WebName
-            };
+            // The value is a known-valid constant. Adding it in its wire form avoids constructing the
+            // same mutable MediaTypeHeaderValue for every event or sharing one between requests.
+            content.Headers.TryAddWithoutValidation("Content-Type", JsonContentType);
 
             // The response is buffered by the time PostAsync returns, so the connection is already back
             // in the pool - but the response still holds the buffered content, and leaving it to the
