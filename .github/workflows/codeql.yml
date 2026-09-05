@@ -26,7 +26,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # C# no-build analysis restores project dependencies and avoids coupling the
       # security scan to the repository's multi-target build and test matrix.
