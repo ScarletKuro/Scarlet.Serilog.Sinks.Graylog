@@ -24,3 +24,11 @@ wrapper around the transport client:
 ```powershell
 dotnet run -c Release --project benchmarks/Scarlet.Serilog.Sinks.Graylog.Benchmarks -- --filter "*UdpDispatch*"
 ```
+
+The pending-send comparison measures the bookkeeping used by unbatched fire-and-forget sends. It
+compares the former concurrent dictionary and two continuations with the counter and single
+continuation used by the sink:
+
+```powershell
+dotnet run -c Release --project benchmarks/Scarlet.Serilog.Sinks.Graylog.Benchmarks -- --filter "*PendingSend*"
+```

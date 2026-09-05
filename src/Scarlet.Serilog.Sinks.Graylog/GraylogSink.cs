@@ -5,7 +5,6 @@ using Scarlet.Serilog.Sinks.Graylog.Core;
 using Scarlet.Serilog.Sinks.Graylog.Core.Helpers;
 using Scarlet.Serilog.Sinks.Graylog.Core.Transport;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading;
@@ -46,10 +45,18 @@ namespace Scarlet.Serilog.Sinks.Graylog
         private readonly JsonWriterOptions _writerOptions;
 
         /// <summary>
-        /// Sends started by <see cref="Emit"/> that have not finished yet, so disposal can wait for
-        /// them instead of tearing the transport down underneath them.
+        /// Number of sends started by <see cref="Emit"/> whose completion has not yet been reported.
+        /// A count is enough because disposal only needs to know when all sends have drained; retaining
+        /// each continuation in a concurrent dictionary allocated a node and a removal continuation per
+        /// event.
         /// </summary>
-        private readonly ConcurrentDictionary<Task, byte> _inFlight = new ConcurrentDictionary<Task, byte>();
+        private int _inFlightCount;
+
+        /// <summary>
+        /// Created only when disposal finds work in flight. The last reporting continuation completes
+        /// it, letting disposal wait on one task regardless of how many sends are pending.
+        /// </summary>
+        private TaskCompletionSource<object?>? _drained;
 
         /// <summary>
         /// Non-zero once disposal has started. An <see cref="int"/> driven through
@@ -121,28 +128,26 @@ namespace Scarlet.Serilog.Sinks.Graylog
                 return;
             }
 
-            // What Dispose waits on is the reporting continuation, not the send. Waiting on the send
-            // alone let the process exit between the send completing and the diagnostic reaching
-            // SelfLog, so a failed delivery could disappear without a trace.
-            Task reported = send.ContinueWith(
-                static (task, _) => Report(task),
-                null,
-                CancellationToken.None,
-                TaskContinuationOptions.ExecuteSynchronously,
-                // Never the ambient scheduler: on a UI thread that would queue the diagnostic behind
-                // whatever the application is doing.
-                TaskScheduler.Default);
+            // Count before attaching the continuation: ExecuteSynchronously may run it immediately
+            // when the send completes between the IsCompleted check above and ContinueWith.
+            Interlocked.Increment(ref _inFlightCount);
 
-            // Registered before the remover is attached, so the remover cannot run first and leave a
-            // completed entry behind for the lifetime of the sink.
-            _inFlight[reported] = 0;
-
-            reported.ContinueWith(
-                static (task, state) => ((GraylogSink)state!)._inFlight.TryRemove(task, out _),
-                this,
-                CancellationToken.None,
-                TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
+            try
+            {
+                send.ContinueWith(
+                    static (task, state) => ((GraylogSink)state!).CompleteSend(task),
+                    this,
+                    CancellationToken.None,
+                    TaskContinuationOptions.ExecuteSynchronously,
+                    // Never the ambient scheduler: on a UI thread that would queue the diagnostic
+                    // behind whatever the application is doing.
+                    TaskScheduler.Default);
+            }
+            catch (Exception)
+            {
+                ReleaseSend();
+                throw;
+            }
         }
 
         /// <summary>
@@ -154,6 +159,32 @@ namespace Scarlet.Serilog.Sinks.Graylog
             if (send.IsFaulted)
             {
                 SelfLog.WriteLine("Could not send a log event to Graylog: {0}", send.Exception?.GetBaseException());
+            }
+        }
+
+        private void CompleteSend(Task send)
+        {
+            try
+            {
+                Report(send);
+            }
+            catch (Exception)
+            {
+                // A broken SelfLog callback must not strand disposal. The previous reporting task
+                // faulted here and Dispose observed it while waiting; there is no retained task now,
+                // so swallow the callback failure after the original send exception was observed.
+            }
+            finally
+            {
+                ReleaseSend();
+            }
+        }
+
+        private void ReleaseSend()
+        {
+            if (Interlocked.Decrement(ref _inFlightCount) == 0)
+            {
+                Volatile.Read(ref _drained)?.TrySetResult(null);
             }
         }
 
@@ -247,19 +278,15 @@ namespace Scarlet.Serilog.Sinks.Graylog
                 return;
             }
 
-            Task[] pending = TakePending();
-
-            if (pending.Length > 0 && _shutdownTimeout is { } timeout)
+            if (_shutdownTimeout is { } timeout)
             {
-                try
+                Task drained = GetDrainTask();
+
+                if (!drained.IsCompleted)
                 {
                     // Safe to block: every await in the send path uses ConfigureAwait(false), so no
                     // continuation is waiting on the caller's synchronization context.
-                    Task.WaitAll(pending, timeout);
-                }
-                catch (AggregateException)
-                {
-                    // Each send already reported itself to SelfLog through its own continuation.
+                    drained.Wait(timeout);
                 }
             }
 
@@ -281,33 +308,39 @@ namespace Scarlet.Serilog.Sinks.Graylog
                 return;
             }
 
-            Task[] pending = TakePending();
-
-            if (pending.Length > 0 && _shutdownTimeout is { } timeout)
+            if (_shutdownTimeout is { } timeout)
             {
-                Task all = Task.WhenAll(pending);
+                Task drained = GetDrainTask();
 
-                await Task.WhenAny(all, Task.Delay(timeout)).ConfigureAwait(false);
-
-                // Observed so a faulted batch cannot resurface as an unobserved task exception; the
-                // individual failures already reached SelfLog.
-                _ = all.Exception;
+                if (!drained.IsCompleted)
+                {
+                    await Task.WhenAny(drained, Task.Delay(timeout)).ConfigureAwait(false);
+                }
             }
 
             DisposeTransport();
         }
 #endif
 
-        private Task[] TakePending()
+        private Task GetDrainTask()
         {
-            var pending = new List<Task>(_inFlight.Count);
-
-            foreach (Task send in _inFlight.Keys)
+            if (Volatile.Read(ref _inFlightCount) == 0)
             {
-                pending.Add(send);
+                return Task.CompletedTask;
             }
 
-            return pending.ToArray();
+            var drained = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            Volatile.Write(ref _drained, drained);
+
+            // A completion may have observed a null _drained between the count check and publication.
+            // Rechecking after publication closes that missed-wakeup window.
+            if (Volatile.Read(ref _inFlightCount) == 0)
+            {
+                drained.TrySetResult(null);
+            }
+
+            return drained.Task;
         }
 
         private void DisposeTransport()

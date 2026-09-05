@@ -219,6 +219,42 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         }
 
         [Fact]
+        public async Task Dispose_WaitsUntilEverySendHasDrained()
+        {
+            var first = new TaskCompletionSource<bool>();
+            var second = new TaskCompletionSource<bool>();
+            int sendCount = 0;
+            RecordingTransport transport = new(_ => Interlocked.Increment(ref sendCount) == 1
+                ? first.Task
+                : second.Task);
+
+            var sink = new GraylogSink(transport.SinkOptions());
+            sink.Emit(LogEventSource.GetSimpleLogEvent(DateTimeOffset.UnixEpoch));
+            sink.Emit(LogEventSource.GetSimpleLogEvent(DateTimeOffset.UnixEpoch));
+
+            CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+            var disposalStarted = new TaskCompletionSource<object?>();
+            Task disposal = Task.Run(() =>
+            {
+                disposalStarted.SetResult(null);
+                sink.Dispose();
+            }, cancellationToken);
+
+            await disposalStarted.Task.WaitAsync(TimeSpan.FromSeconds(10), cancellationToken);
+
+            first.SetResult(true);
+            Task premature = await Task.WhenAny(disposal, Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken));
+            Assert.NotSame(disposal, premature);
+
+            Assert.False(disposal.IsCompleted,
+                "Dispose returned while the second send was still in flight.");
+
+            second.SetResult(true);
+            await disposal.WaitAsync(TimeSpan.FromSeconds(10), cancellationToken);
+            Assert.Equal(1, transport.DisposeCount);
+        }
+
+        [Fact]
         public async Task DisposeAsync_WaitsForSendsAlreadyInFlight()
         {
             int completed = 0;
