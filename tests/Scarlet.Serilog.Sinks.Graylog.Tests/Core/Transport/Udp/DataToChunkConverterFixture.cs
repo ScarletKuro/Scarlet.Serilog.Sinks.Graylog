@@ -13,7 +13,6 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
     {
         private readonly ChunkSettings _settings;
         private readonly Fixture _fixture;
-        private readonly IMessageIdGenerator _messageIdGenerator;
 
         private const int MaxDatagram = 8192;
         private const int MaxChunkPayload = MaxDatagram - ChunkSettings.PrefixSize;
@@ -23,7 +22,6 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
         {
             _settings = new ChunkSettings(MaxDatagram);
             _fixture = new Fixture();
-            _messageIdGenerator = Substitute.For<IMessageIdGenerator>();
         }
 
         /// <summary>
@@ -42,7 +40,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
         [InlineData(MaxChunks * MaxChunkPayload, MaxChunks)]
         public void ConvertToChunks_AtAChunkBoundary_ProducesTheExactChunkCount(int payloadLength, int expectedChunks)
         {
-            var target = new DataToChunkConverter(_settings, StubGenerator());
+            var target = new DataToChunkConverter(_settings);
 
             IReadOnlyList<byte[]> actual = target.ConvertToChunks(new byte[payloadLength]);
 
@@ -57,22 +55,15 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
         [Fact]
         public void ConvertToChunks_OneByteBeyondTheChunkCeiling_Throws()
         {
-            var target = new DataToChunkConverter(_settings, StubGenerator());
+            var target = new DataToChunkConverter(_settings);
 
             Assert.Throws<ArgumentException>(() => target.ConvertToChunks(new byte[(MaxChunks * MaxChunkPayload) + 1]));
-        }
-
-        private IMessageIdGenerator StubGenerator()
-        {
-            _messageIdGenerator.GenerateMessageId(Arg.Any<ReadOnlyMemory<byte>>()).Returns(new byte[8]);
-
-            return _messageIdGenerator;
         }
 
         [Fact]
         public void WhenConvertToChunkWithSmallData_ThenReturnsOneChunk()
         {
-            var target = new DataToChunkConverter(_settings, _messageIdGenerator);
+            var target = new DataToChunkConverter(_settings);
 
             byte[] data = _fixture.CreateMany<byte>(1000).ToArray();
             IReadOnlyList<byte[]> actual = target.ConvertToChunks(data);
@@ -90,7 +81,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
         {
             byte[] data = new byte[10000000];
 
-            var target = new DataToChunkConverter(_settings, _messageIdGenerator);
+            var target = new DataToChunkConverter(_settings);
 
             Assert.Throws<ArgumentException>(() => target.ConvertToChunks(data));
         }
@@ -100,16 +91,13 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Udp
         {
             byte[] data = new byte[100000];
 
-            var messageId = _fixture.CreateMany<byte>(8).ToArray();
-
-            _messageIdGenerator.GenerateMessageId(data).Returns(messageId);
-
-            var target = new DataToChunkConverter(_settings, _messageIdGenerator);
+            var target = new DataToChunkConverter(_settings);
 
             var actual = target.ConvertToChunks(data);
 
-
             Assert.True(actual.Count == 13);
+
+            byte[] messageId = actual[0].Skip(2).Take(8).ToArray();
 
             for (int i = 0; i < actual.Count; i++)
             {

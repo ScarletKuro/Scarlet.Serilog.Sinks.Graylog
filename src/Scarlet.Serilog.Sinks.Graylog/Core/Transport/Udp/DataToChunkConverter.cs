@@ -8,17 +8,14 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
     internal sealed class DataToChunkConverter : IDataToChunkConverter
     {
         private readonly ChunkSettings _settings;
-        private readonly IMessageIdGenerator _messageIdGenerator;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="DataToChunkConverter"/> class.
         /// </summary>
         /// <param name="settings">The settings.</param>
-        /// <param name="messageIdGenerator">Produces the identifier the chunks of one message share.</param>
-        public DataToChunkConverter(ChunkSettings settings, IMessageIdGenerator messageIdGenerator)
+        public DataToChunkConverter(ChunkSettings settings)
         {
             _settings = settings;
-            _messageIdGenerator = messageIdGenerator;
         }
 
         /// <inheritdoc />
@@ -37,7 +34,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
                 throw new ArgumentException("message was too long", nameof(message));
             }
 
-            byte[] messageId = _messageIdGenerator.GenerateMessageId(message);
+            byte[] messageId = SecureRandom.NextBytes(8);
             ReadOnlySpan<byte> payload = message.Span;
 
             var result = new byte[chunksCount][];
