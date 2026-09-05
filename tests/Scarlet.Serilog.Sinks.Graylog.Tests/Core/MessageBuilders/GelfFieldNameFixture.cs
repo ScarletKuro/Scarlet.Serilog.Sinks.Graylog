@@ -149,6 +149,15 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
             Assert.False(actual.ContainsKey("__already"));
         }
 
+        [Fact]
+        public void Build_PrefixedPropertyWithIllegalCharacters_IsStillSanitized()
+        {
+            JsonObject actual = Build("_not valid", new ScalarValue("value"));
+
+            Assert.True(actual.ContainsKey("_not_valid"));
+            Assert.False(actual.ContainsKey("_not valid"));
+        }
+
         /// <summary>
         /// The template field name comes from configuration, so it is user input like any other.
         /// </summary>

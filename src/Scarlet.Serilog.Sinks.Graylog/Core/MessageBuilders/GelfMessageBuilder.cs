@@ -14,8 +14,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
     public class GelfMessageBuilder : IMessageBuilder
     {
         private const string DefaultGelfVersion = "1.1";
-        private const string StringLevel = "stringLevel";
-        private const string Facility = "facility";
+        private const string StringLevel = "_stringLevel";
+        private const string Facility = "_facility";
 
         private readonly string _hostName;
 

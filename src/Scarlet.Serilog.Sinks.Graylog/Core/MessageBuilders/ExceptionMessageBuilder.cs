@@ -50,23 +50,23 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
             // GelfConverter only routes to this builder when logEvent.Exception is non-null.
             Exception exception = logEvent.Exception!;
 
-            fields.WriteField("ExceptionSource", exception.Source);
-            fields.WriteField("ExceptionType", exception.GetType().FullName);
+            fields.WriteField("_ExceptionSource", exception.Source);
+            fields.WriteField("_ExceptionType", exception.GetType().FullName);
 
             var messages = new StringBuilder();
             var stackTraces = new StringBuilder();
 
             Flatten(exception, messages, stackTraces);
 
-            fields.WriteField("ExceptionMessage", messages.ToString().Trim());
+            fields.WriteField("_ExceptionMessage", messages.ToString().Trim());
 
             if (stackTraces.Length > 0)
             {
-                fields.WriteField("StackTrace", stackTraces.ToString().Trim());
+                fields.WriteField("_StackTrace", stackTraces.ToString().Trim());
             }
             else
             {
-                fields.WriteField("StackTrace", null);
+                fields.WriteField("_StackTrace", null);
             }
         }
 

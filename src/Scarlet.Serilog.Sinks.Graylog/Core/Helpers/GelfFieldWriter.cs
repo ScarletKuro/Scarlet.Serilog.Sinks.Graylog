@@ -72,6 +72,15 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
 
         private static string ToGelfFieldName(string name)
         {
+            // The sink's own additional fields already carry the GELF prefix, and callers commonly
+            // supply pre-normalized names too. Reuse those strings instead of allocating an identical
+            // copy for every event. Only inspect the prefixed case, so ordinary Serilog property names
+            // still take the existing single normalization pass.
+            if (name.Length > 0 && name[0] == '_' && IsNormalized(name))
+            {
+                return name;
+            }
+
             bool reserved = IsReserved(name.AsSpan());
             bool prefixed = name.Length > 0 && (name[0] == '_' || !IsAllowedInFieldName(name[0]));
             int prefixLength = prefixed ? 0 : 1;
@@ -122,6 +131,19 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
 
             return new string(characters);
 #endif
+        }
+
+        private static bool IsNormalized(string name)
+        {
+            for (int i = 1; i < name.Length; i++)
+            {
+                if (!IsAllowedInFieldName(name[i]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static bool IsReserved(ReadOnlySpan<char> name)
