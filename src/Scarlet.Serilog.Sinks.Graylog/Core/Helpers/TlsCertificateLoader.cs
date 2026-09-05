@@ -40,9 +40,11 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
 
             try
             {
-#pragma warning disable SYSLIB0057 // The supported loader API is unavailable on the legacy targets.
+#if NET9_0_OR_GREATER
+                return (X509CertificateLoader.LoadPkcs12FromFile(path, options.ClientCertificatePassword), true);
+#else
                 return (new X509Certificate2(path, options.ClientCertificatePassword), true);
-#pragma warning restore SYSLIB0057
+#endif
             }
             catch (Exception exception) when (exception is CryptographicException || exception is IOException || exception is UnauthorizedAccessException)
             {
