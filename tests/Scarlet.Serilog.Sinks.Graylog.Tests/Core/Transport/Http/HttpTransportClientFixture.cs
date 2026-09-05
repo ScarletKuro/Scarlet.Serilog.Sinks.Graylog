@@ -483,7 +483,22 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Http
             protected override HttpClient CreateHttpClient()
             {
                 Interlocked.Increment(ref _createHttpClientCount);
-                return new HttpClient(Handler);
+                return new HttpClient(Handler, disposeHandler: false);
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                try
+                {
+                    base.Dispose(disposing);
+                }
+                finally
+                {
+                    if (disposing)
+                    {
+                        Handler.Dispose();
+                    }
+                }
             }
         }
 
