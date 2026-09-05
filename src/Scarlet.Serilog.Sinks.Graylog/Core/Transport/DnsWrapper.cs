@@ -9,7 +9,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport
     /// <summary>
     /// The default <see cref="IDnsInfoProvider"/>, backed by <see cref="Dns"/>.
     /// </summary>
-    internal class DnsWrapper : IDnsInfoProvider
+    internal sealed class DnsWrapper : IDnsInfoProvider
     {
         /// <inheritdoc />
         public async Task<IPAddress?> GetIpAddress(string hostNameOrAddress)

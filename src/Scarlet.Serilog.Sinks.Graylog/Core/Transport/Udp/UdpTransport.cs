@@ -18,9 +18,25 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
         /// Initializes a new instance of the <see cref="UdpTransport"/> class.
         /// </summary>
         /// <param name="transportClient">The transport client.</param>
-        /// <param name="chunkConverter">The GELF chunk converter.</param>
         /// <param name="options">The UDP transport options.</param>
-        public UdpTransport(ITransportClient transportClient, IDataToChunkConverter chunkConverter, UdpTransportOptions options)
+        public UdpTransport(ITransportClient transportClient, UdpTransportOptions options)
+            : this(
+                transportClient,
+                new DataToChunkConverter(new ChunkSettings(options.MaximumDatagramSize)),
+                options)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance with an injected chunk converter.
+        /// </summary>
+        /// <param name="transportClient">The transport client.</param>
+        /// <param name="chunkConverter">Splits oversized GELF payloads into UDP datagrams.</param>
+        /// <param name="options">The UDP transport options.</param>
+        public UdpTransport(
+            ITransportClient transportClient,
+            IDataToChunkConverter chunkConverter,
+            UdpTransportOptions options)
         {
             _transportClient = transportClient;
             _chunkConverter = chunkConverter;

@@ -36,6 +36,15 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Tcp
         /// Initializes a new instance of the <see cref="TcpTransportClient"/> class.
         /// </summary>
         /// <param name="options">The TCP transport options.</param>
+        public TcpTransportClient(TcpTransportOptions options)
+            : this(options, new DnsWrapper())
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance with an injected host resolver.
+        /// </summary>
+        /// <param name="options">The TCP transport options.</param>
         /// <param name="dnsInfoProvider">Resolves <see cref="TcpTransportOptions.Host"/> to an address.</param>
         public TcpTransportClient(TcpTransportOptions options, IDnsInfoProvider dnsInfoProvider)
         {

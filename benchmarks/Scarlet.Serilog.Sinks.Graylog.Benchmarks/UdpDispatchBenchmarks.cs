@@ -16,7 +16,6 @@ public class UdpDispatchBenchmarks
     {
         _transport = new UdpTransport(
             _client,
-            new UnusedChunkConverter(),
             new UdpTransportOptions { Compression = UdpCompression.None });
     }
 
@@ -46,14 +45,6 @@ public class UdpDispatchBenchmarks
 
         public void Dispose()
         {
-        }
-    }
-
-    private sealed class UnusedChunkConverter : IDataToChunkConverter
-    {
-        public IReadOnlyList<byte[]> ConvertToChunks(ReadOnlyMemory<byte> message)
-        {
-            throw new InvalidOperationException("The benchmark payload should fit in one datagram.");
         }
     }
 }

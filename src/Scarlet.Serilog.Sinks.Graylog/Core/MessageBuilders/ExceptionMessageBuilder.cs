@@ -10,7 +10,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
     /// Exception builder
     /// </summary>
     /// <seealso cref="GelfMessageBuilder" />
-    public sealed class ExceptionMessageBuilder : GelfMessageBuilder
+    internal sealed class ExceptionMessageBuilder : GelfMessageBuilder
     {
         private const string DefaultExceptionDelimiter = " - ";
         private const string DefaultStackTraceDelimiter = "--- Inner exception stack trace ---";
@@ -20,7 +20,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
         /// </summary>
         /// <param name="hostName">Name of the host.</param>
         /// <param name="options">The options.</param>
-        public ExceptionMessageBuilder(string hostName, GelfOptions options) : base(hostName, options)
+        internal ExceptionMessageBuilder(string hostName, GelfOptions options) : base(hostName, options)
         {
         }
 

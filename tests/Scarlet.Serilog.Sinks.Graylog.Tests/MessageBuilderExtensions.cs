@@ -15,22 +15,22 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
     /// <remarks>
     /// The builders write UTF-8 straight into a <see cref="Utf8JsonWriter"/>, so a fixture that wants
     /// to assert on fields has to read the payload back. Two shapes are offered because the two kinds
-    /// of assertion need different things: <see cref="Build(IMessageBuilder, LogEvent)"/> parses the
+    /// of assertion need different things: <see cref="Build(GelfMessageBuilder, LogEvent)"/> parses the
     /// payload into a <see cref="JsonObject"/> for structural assertions, while
-    /// <see cref="BuildPayload(IMessageBuilder, LogEvent)"/> hands back the bytes as text, for the
+    /// <see cref="BuildPayload(GelfMessageBuilder, LogEvent)"/> hands back the bytes as text, for the
     /// fixtures that pin the wire format byte-for-byte. Going through <see cref="JsonNode"/> for those
     /// would re-serialize - and re-escape - the very output they are checking.
     /// </remarks>
     internal static class MessageBuilderExtensions
     {
-        internal static JsonObject Build(this IMessageBuilder builder, LogEvent logEvent)
+        internal static JsonObject Build(this GelfMessageBuilder builder, LogEvent logEvent)
         {
             JsonNode? payload = JsonNode.Parse(builder.BuildPayload(logEvent));
 
             return Assert.IsType<JsonObject>(payload);
         }
 
-        internal static string BuildPayload(this IMessageBuilder builder, LogEvent logEvent)
+        internal static string BuildPayload(this GelfMessageBuilder builder, LogEvent logEvent)
         {
             return Write(writer => builder.Build(logEvent, writer));
         }

@@ -1,7 +1,6 @@
 using Serilog.Events;
 using Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders;
 using System;
-using System.Collections.Generic;
 using System.Text.Json;
 
 namespace Scarlet.Serilog.Sinks.Graylog.Core
@@ -9,34 +8,37 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core
     /// <summary>
     /// The default <see cref="IGelfConverter"/>, which dispatches to a message builder per event kind.
     /// </summary>
-    public sealed class GelfConverter : IGelfConverter
+    internal sealed class GelfConverter : IGelfConverter
     {
-        private readonly IDictionary<BuilderType, Lazy<IMessageBuilder>> _messageBuilders;
+        private readonly Lazy<GelfMessageBuilder> _messageBuilder;
+        private readonly Lazy<ExceptionMessageBuilder> _exceptionBuilder;
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="GelfConverter"/> class.
-        /// </summary>
-        /// <param name="messageBuilders">
-        /// The builder to use per <see cref="BuilderType"/>. Both <see cref="BuilderType.Exception"/>
-        /// and <see cref="BuilderType.Message"/> must be present; each is constructed on first use.
-        /// </param>
-        public GelfConverter(IDictionary<BuilderType, Lazy<IMessageBuilder>> messageBuilders)
+        internal GelfConverter(
+            string hostName,
+            GelfOptions options,
+            JsonSerializerOptions serializerOptions)
         {
-            _messageBuilders = messageBuilders;
+            _messageBuilder = new Lazy<GelfMessageBuilder>(
+                () => new GelfMessageBuilder(hostName, options, serializerOptions));
+            _exceptionBuilder = new Lazy<ExceptionMessageBuilder>(
+                () => new ExceptionMessageBuilder(hostName, options, serializerOptions));
         }
 
         /// <inheritdoc />
         /// <remarks>
-        /// An event carrying an exception goes to the <see cref="BuilderType.Exception"/> builder, and
-        /// everything else to the <see cref="BuilderType.Message"/> one.
+        /// An event carrying an exception goes to the exception builder, and everything else to the
+        /// ordinary message builder.
         /// </remarks>
         public void WriteGelfJson(LogEvent logEvent, Utf8JsonWriter writer)
         {
-            IMessageBuilder builder = logEvent.Exception != null
-                ? _messageBuilders[BuilderType.Exception].Value
-                : _messageBuilders[BuilderType.Message].Value;
-
-            builder.Build(logEvent, writer);
+            if (logEvent.Exception != null)
+            {
+                _exceptionBuilder.Value.Build(logEvent, writer);
+            }
+            else
+            {
+                _messageBuilder.Value.Build(logEvent, writer);
+            }
         }
     }
 }

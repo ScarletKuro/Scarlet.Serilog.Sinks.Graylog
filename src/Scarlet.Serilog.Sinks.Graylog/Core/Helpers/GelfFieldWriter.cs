@@ -7,7 +7,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
     /// <summary>
     /// Writes GELF additional fields, applying the required prefix, reserved-name and character rules.
     /// </summary>
-    public sealed class GelfFieldWriter
+    internal sealed class GelfFieldWriter
     {
         private readonly HashSet<string> _written;
 

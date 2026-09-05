@@ -33,6 +33,15 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
         /// Initializes a new instance of the <see cref="UdpTransportClient"/> class.
         /// </summary>
         /// <param name="options">The UDP transport options.</param>
+        public UdpTransportClient(UdpTransportOptions options)
+            : this(options, new DnsWrapper(), Stopwatch.GetTimestamp)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance with an injected host resolver.
+        /// </summary>
+        /// <param name="options">The UDP transport options.</param>
         /// <param name="dnsInfoProvider">Resolves <see cref="UdpTransportOptions.Host"/> to an address.</param>
         public UdpTransportClient(UdpTransportOptions options, IDnsInfoProvider dnsInfoProvider)
             : this(options, dnsInfoProvider, Stopwatch.GetTimestamp)
@@ -40,11 +49,16 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Transport.Udp
         }
 
         /// <summary>
-        /// Initializes a new instance with an injected clock, so a test can age the resolved address
-        /// without waiting. <see cref="Stopwatch.GetTimestamp"/> is the only clock available on every
-        /// target framework - TimeProvider and Environment.TickCount64 are not.
+        /// Initializes a new instance with an injected resolver and clock for isolated transport
+        /// tests.
         /// </summary>
-        internal UdpTransportClient(UdpTransportOptions options, IDnsInfoProvider dnsInfoProvider, Func<long> timestamp)
+        /// <param name="options">The UDP transport options.</param>
+        /// <param name="dnsInfoProvider">Resolves <see cref="UdpTransportOptions.Host"/> to an address.</param>
+        /// <param name="timestamp">Reads the monotonic clock used to age resolved addresses.</param>
+        internal UdpTransportClient(
+            UdpTransportOptions options,
+            IDnsInfoProvider dnsInfoProvider,
+            Func<long> timestamp)
         {
             _options = options;
             _dnsInfoProvider = dnsInfoProvider;

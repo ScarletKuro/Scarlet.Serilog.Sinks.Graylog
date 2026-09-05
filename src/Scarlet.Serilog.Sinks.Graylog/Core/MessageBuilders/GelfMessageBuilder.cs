@@ -11,7 +11,7 @@ using System.Text.Json;
 namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
 {
     /// <summary>Writes a log event as a GELF JSON object.</summary>
-    public class GelfMessageBuilder : IMessageBuilder
+    internal class GelfMessageBuilder
     {
         private const string DefaultGelfVersion = "1.1";
         private const string StringLevel = "_stringLevel";
@@ -42,7 +42,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
 
         /// <summary>Initializes a GELF message builder.</summary>
         /// <exception cref="ArgumentNullException"><paramref name="options"/> is <c>null</c>.</exception>
-        public GelfMessageBuilder(string hostName, GelfOptions options)
+        internal GelfMessageBuilder(string hostName, GelfOptions options)
             : this(hostName, options, GetSerializerOptions(options))
         {
         }
@@ -78,7 +78,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
         }
 
         /// <inheritdoc />
-        public virtual void Build(LogEvent logEvent, Utf8JsonWriter writer)
+        public void Build(LogEvent logEvent, Utf8JsonWriter writer)
         {
             if (logEvent == null)
             {

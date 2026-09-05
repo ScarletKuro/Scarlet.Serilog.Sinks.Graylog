@@ -131,8 +131,8 @@ validated without error. Wire the subclass up through `CustomTransportOptions.Fa
 ```csharp
 internal sealed class PinnedTcpTransportClient : TcpTransportClient
 {
-    public PinnedTcpTransportClient(TcpTransportOptions options, IDnsInfoProvider dns)
-        : base(options, dns)
+    public PinnedTcpTransportClient(TcpTransportOptions options)
+        : base(options)
     {
     }
 

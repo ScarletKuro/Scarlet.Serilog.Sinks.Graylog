@@ -421,7 +421,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
                 TransportType = TransportType.Custom,
                 Custom = new CustomTransportOptions
                 {
-                    Factory = () => new TcpTransport(new PinnedTcpTransportClient(tcp, new DnsWrapper(), thumbprint))
+                    Factory = () => new TcpTransport(new PinnedTcpTransportClient(tcp, thumbprint))
                 },
                 Message = new GelfOptions { Facility = "integration-tcp-tls" }
             }))
@@ -443,8 +443,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
         {
             private readonly string _thumbprint;
 
-            public PinnedTcpTransportClient(TcpTransportOptions options, IDnsInfoProvider dns, string thumbprint)
-                : base(options, dns)
+            public PinnedTcpTransportClient(TcpTransportOptions options, string thumbprint)
+                : base(options)
             {
                 _thumbprint = thumbprint;
             }
