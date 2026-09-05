@@ -20,7 +20,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Helpers
         public void GenerateMessageId_ReturnsTheEightBytesTheChunkHeaderReserves()
         {
             byte[] given = _fixture.CreateMany<byte>(10).ToArray();
-            var target = new RandomMessageIdGenerator();
+            var target = RandomMessageIdGenerator.Instance;
 
             byte[] actual = target.GenerateMessageId(given);
 
@@ -36,7 +36,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Helpers
         public void GenerateMessageId_EveryIdIsDistinct()
         {
             byte[] given = _fixture.CreateMany<byte>(10).ToArray();
-            var target = new RandomMessageIdGenerator();
+            var target = RandomMessageIdGenerator.Instance;
 
             var ids = new HashSet<string>(StringComparer.Ordinal);
             for (int i = 0; i < 10000; i++)
@@ -55,7 +55,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Helpers
         public void GenerateMessageId_ForTheSamePayload_StillDiffers()
         {
             byte[] given = _fixture.CreateMany<byte>(10).ToArray();
-            var target = new RandomMessageIdGenerator();
+            var target = RandomMessageIdGenerator.Instance;
 
             Assert.NotEqual(target.GenerateMessageId(given), target.GenerateMessageId(given));
         }

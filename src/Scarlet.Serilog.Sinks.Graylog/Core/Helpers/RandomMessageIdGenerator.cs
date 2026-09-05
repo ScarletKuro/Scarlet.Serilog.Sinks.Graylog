@@ -13,4 +13,6 @@ internal sealed class RandomMessageIdGenerator : IMessageIdGenerator
     {
         return SecureRandom.NextBytes(8);
     }
+
+    public static RandomMessageIdGenerator Instance { get; } = new RandomMessageIdGenerator();
 }
