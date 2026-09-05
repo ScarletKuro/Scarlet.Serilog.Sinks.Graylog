@@ -17,6 +17,13 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
         private const string StringLevel = "_stringLevel";
         private const string Facility = "_facility";
 
+        private static readonly JsonEncodedText VersionFieldName = JsonEncodedText.Encode("version");
+        private static readonly JsonEncodedText HostFieldName = JsonEncodedText.Encode("host");
+        private static readonly JsonEncodedText ShortMessageFieldName = JsonEncodedText.Encode("short_message");
+        private static readonly JsonEncodedText TimestampFieldName = JsonEncodedText.Encode("timestamp");
+        private static readonly JsonEncodedText LevelFieldName = JsonEncodedText.Encode("level");
+        private static readonly JsonEncodedText FullMessageFieldName = JsonEncodedText.Encode("full_message");
+
         private readonly string _hostName;
 
         /// <summary>
@@ -103,11 +110,11 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
             string rendered = logEvent.RenderMessage();
             int shortLength = Math.Min(rendered.Length, Options.ShortMessageMaxLength);
 
-            writer.WriteString("version", DefaultGelfVersion);
-            writer.WriteString("host", Options.HostnameOverride ?? _hostName);
-            writer.WriteString("short_message", rendered.AsSpan(0, shortLength));
-            writer.WriteNumber("timestamp", logEvent.Timestamp.ConvertToNix());
-            writer.WriteNumber("level", LogLevelMapper.GetMappedLevel(logEvent.Level));
+            writer.WriteString(VersionFieldName, DefaultGelfVersion);
+            writer.WriteString(HostFieldName, Options.HostnameOverride ?? _hostName);
+            writer.WriteString(ShortMessageFieldName, rendered.AsSpan(0, shortLength));
+            writer.WriteNumber(TimestampFieldName, logEvent.Timestamp.ConvertToNix());
+            writer.WriteNumber(LevelFieldName, LogLevelMapper.GetMappedLevel(logEvent.Level));
 
             if (fields.BeginField(StringLevel))
             {
@@ -121,7 +128,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
 
             if (rendered.Length > Options.ShortMessageMaxLength)
             {
-                writer.WriteString("full_message", rendered);
+                writer.WriteString(FullMessageFieldName, rendered);
             }
         }
 
