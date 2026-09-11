@@ -93,7 +93,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
 
             // Every event writes _stringLevel; reserve the optional top-level fields as well as the
             // properties so the duplicate-name set does not repeatedly grow on larger events.
-            int expectedFieldCount = logEvent.Properties.Count + 1;
+            int expectedFieldCount = logEvent.Properties.Count + 1 + ExtraFieldCount;
 
             if (Options.Facility != null)
             {
@@ -118,6 +118,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
         protected virtual void WriteExtraFields(LogEvent logEvent, GelfFieldWriter fields)
         {
         }
+
+        /// <summary>Number of additional fields <see cref="WriteExtraFields"/> writes.</summary>
+        protected virtual int ExtraFieldCount => 0;
 
         private void WriteCoreFields(LogEvent logEvent, GelfFieldWriter fields)
         {

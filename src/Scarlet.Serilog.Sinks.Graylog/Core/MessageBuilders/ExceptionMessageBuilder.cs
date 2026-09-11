@@ -16,6 +16,14 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
         private const string DefaultStackTraceDelimiter = "--- Inner exception stack trace ---";
 
         /// <summary>
+        /// Kept in sync with the fields <see cref="WriteExtraFields"/> always writes: <c>_ExceptionSource</c>,
+        /// <c>_ExceptionType</c>, <c>_ExceptionMessage</c> and <c>_StackTrace</c>. A drift here does not
+        /// break anything - <see cref="GelfFieldWriter"/>'s duplicate-name set just resizes once more
+        /// than necessary - but it does silently lose the point of <see cref="ExtraFieldCount"/>.
+        /// </summary>
+        private const int ExceptionFieldCount = 4;
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="ExceptionMessageBuilder"/> class.
         /// </summary>
         /// <param name="hostName">Name of the host.</param>
@@ -31,6 +39,9 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
             : base(hostName, options, serializerOptions)
         {
         }
+
+        /// <inheritdoc />
+        protected override int ExtraFieldCount => ExceptionFieldCount;
 
         /// <inheritdoc />
         /// <remarks>
