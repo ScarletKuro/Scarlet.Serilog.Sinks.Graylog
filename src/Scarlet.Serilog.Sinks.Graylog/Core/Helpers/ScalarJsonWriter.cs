@@ -84,9 +84,23 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
 #endif
         };
 
+        /// <summary>
+        /// Whether <see cref="_options"/>, taken as a whole rather than per type, permits the fast
+        /// path at all - computed once here rather than inside <see cref="CanFastPath"/>, since neither
+        /// half can change after construction: <see cref="JsonSerializerOptions.NumberHandling"/> is
+        /// never touched after the copy is made, and the only way
+        /// <see cref="JsonSerializerOptions.TypeInfoResolver"/> can change post-construction is from
+        /// <c>null</c> to a freshly populated <see cref="DefaultJsonTypeInfoResolver"/> - itself
+        /// "plain" - the one time this class calls <see cref="JsonSerializerOptions.MakeReadOnly(bool)"/>,
+        /// so the classification below can never flip from <c>true</c> to <c>false</c> underneath the
+        /// cache.
+        /// </summary>
+        private readonly bool _optionsAllowFastPath;
+
         public ScalarJsonWriter(JsonSerializerOptions options)
         {
             _options = new JsonSerializerOptions(options);
+            _optionsAllowFastPath = _options.NumberHandling == JsonNumberHandling.Strict && HasOnlyPlainDefaultResolver();
         }
 
         /// <summary>
@@ -195,9 +209,8 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
         /// </summary>
         private bool CanFastPath(Type type)
         {
-            return BuiltInScalarTypes.Contains(type)
-                && _options.NumberHandling == JsonNumberHandling.Strict
-                && HasOnlyPlainDefaultResolver()
+            return _optionsAllowFastPath
+                && BuiltInScalarTypes.Contains(type)
                 && !HasCustomConverter(type);
         }
 

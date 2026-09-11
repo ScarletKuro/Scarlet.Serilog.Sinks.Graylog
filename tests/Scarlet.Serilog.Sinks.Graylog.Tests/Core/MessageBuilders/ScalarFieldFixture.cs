@@ -103,6 +103,43 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
         }
 
         /// <summary>
+        /// Pins <c>JsonSerializer.Serialize(writer, value, contract)</c>'s own output for every value
+        /// in <see cref="IdenticalOnBothPaths"/>, not just <see cref="WriteWithoutReflection"/>'s.
+        /// </summary>
+        /// <remarks>
+        /// Every built-in scalar type now takes the reflection-free fast path under plain options
+        /// (<see cref="Build_WithContractAvailable_WritesExpectedJson"/>) and under a resolver that
+        /// yields nothing (<see cref="Build_WithoutContractAvailable_WritesSameJsonAsContractPath"/>
+        /// uses <see cref="NoContracts"/>), so neither theory exercises the reflection-based serializer
+        /// for this corpus anymore. <see cref="PassThroughResolver"/> delegates to
+        /// <see cref="DefaultJsonTypeInfoResolver"/> while being a different concrete resolver type,
+        /// which forces the contract path without changing the expected output.
+        /// </remarks>
+        [Theory]
+        [MemberData(nameof(IdenticalOnBothPaths))]
+        public void Build_WithContractPathForced_WritesSameJsonAsFastPath(object value, string expected)
+        {
+            var serializerOptions = new JsonSerializerOptions { TypeInfoResolver = new PassThroughResolver() };
+            GelfMessageBuilder messageBuilder = new("localhost", OptionsWith(serializerOptions));
+
+            string actual = FieldJson(messageBuilder, value);
+
+            Assert.Equal(expected, actual);
+        }
+
+        /// <summary>
+        /// Resolves exactly what <see cref="DefaultJsonTypeInfoResolver"/> would, but is not one -
+        /// <see cref="Build_WithContractPathForced_WritesSameJsonAsFastPath"/> uses this to force
+        /// <see cref="ScalarJsonWriter"/>'s fast path off without changing what gets written.
+        /// </summary>
+        private sealed class PassThroughResolver : IJsonTypeInfoResolver
+        {
+            private readonly DefaultJsonTypeInfoResolver _inner = new();
+
+            public JsonTypeInfo? GetTypeInfo(Type type, JsonSerializerOptions options) => _inner.GetTypeInfo(type, options);
+        }
+
+        /// <summary>
         /// The one value whose JSON used to differ between the two paths now agrees on both.
         /// </summary>
         /// <remarks>
