@@ -206,6 +206,55 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
         }
 
         /// <summary>
+        /// A custom converter must keep winning for a built-in numeric type too, not just <see cref="string"/>.
+        /// </summary>
+        [Fact]
+        public void Build_WithCustomConverter_ForABuiltInNumericType_StillHonoursTheConverter()
+        {
+            JsonSerializerOptions serializerOptions = new();
+            serializerOptions.Converters.Add(new DoubledIntConverter());
+            GelfMessageBuilder messageBuilder = new("localhost", OptionsWith(serializerOptions));
+
+            string actual = FieldJson(messageBuilder, 21);
+
+            Assert.Equal("42", actual);
+        }
+
+        /// <summary>
+        /// Non-default number handling changes how every numeric type is written, independently of any
+        /// converter or resolver, so it must keep winning over the reflection-free path too.
+        /// </summary>
+        [Fact]
+        public void Build_WithNonStrictNumberHandling_StillHonoursIt()
+        {
+            JsonSerializerOptions serializerOptions = new()
+            {
+                NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.WriteAsString
+            };
+            GelfMessageBuilder messageBuilder = new("localhost", OptionsWith(serializerOptions));
+
+            string actual = FieldJson(messageBuilder, 42);
+
+            Assert.Equal("\"42\"", actual);
+        }
+
+        /// <summary>
+        /// A subclass of the default resolver must keep winning too, even with zero modifiers - it can
+        /// override <c>GetTypeInfo</c> directly instead, which the fast path's exact-type check must
+        /// still catch.
+        /// </summary>
+        [Fact]
+        public void Build_WithDefaultResolverSubclass_StillHonoursIt()
+        {
+            var serializerOptions = new JsonSerializerOptions { TypeInfoResolver = new IntAsStringResolver() };
+            GelfMessageBuilder messageBuilder = new("localhost", OptionsWith(serializerOptions));
+
+            string actual = FieldJson(messageBuilder, 42);
+
+            Assert.Equal("\"42\"", actual);
+        }
+
+        /// <summary>
         /// Writing a payload must not freeze the consumer's own serializer options.
         /// </summary>
         /// <remarks>
@@ -223,7 +272,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
             GelfMessageBuilder messageBuilder = new("localhost", OptionsWith(serializerOptions));
 
             // A value on the contract path, and one on the reflection-free path.
-            FieldJson(messageBuilder, new Uri("https://example.com/gelf"));
+            FieldJson(messageBuilder, new ContractScalar { Value = 42 });
             FieldJson(messageBuilder, 42);
 
             serializerOptions.WriteIndented = true;
@@ -343,6 +392,40 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
 
             public override void Write(Utf8JsonWriter writer, string value, JsonSerializerOptions options)
                 => writer.WriteStringValue(value.ToUpperInvariant());
+        }
+
+        private sealed class DoubledIntConverter : System.Text.Json.Serialization.JsonConverter<int>
+        {
+            public override int Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+                => reader.GetInt32();
+
+            public override void Write(Utf8JsonWriter writer, int value, JsonSerializerOptions options)
+                => writer.WriteNumberValue(value * 2);
+        }
+
+        /// <summary>
+        /// Customizes a built-in type's contract by overriding <c>GetTypeInfo</c> directly, rather than
+        /// through <see cref="DefaultJsonTypeInfoResolver.Modifiers"/> - so a check that only inspects
+        /// <c>Modifiers.Count</c> would miss it.
+        /// </summary>
+        private sealed class IntAsStringResolver : DefaultJsonTypeInfoResolver
+        {
+            public override JsonTypeInfo GetTypeInfo(Type type, JsonSerializerOptions options)
+            {
+                JsonTypeInfo typeInfo = base.GetTypeInfo(type, options);
+
+                if (type == typeof(int))
+                {
+                    typeInfo.NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.WriteAsString;
+                }
+
+                return typeInfo;
+            }
+        }
+
+        private sealed class ContractScalar
+        {
+            public int Value { get; set; }
         }
 
         /// <summary>

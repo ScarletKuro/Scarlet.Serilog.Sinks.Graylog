@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Reflection;
@@ -37,6 +38,11 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
     /// it a second time, which is why the <c>+</c> in a <see cref="DateTimeOffset"/> offset used to
     /// reach Graylog as a unicode escape sequence.
     /// </para>
+    /// <para>
+    /// <see cref="WriteWithoutReflection"/> is also used as a fast path for built-in scalar types when
+    /// the caller's options cannot change their output. That gate is deliberately narrow: custom
+    /// converters, customized resolvers and non-strict number handling all keep the contract-based path.
+    /// </para>
     /// </remarks>
     internal sealed class ScalarJsonWriter
     {
@@ -61,6 +67,22 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
         /// </summary>
         private readonly ConcurrentDictionary<Type, JsonTypeInfo?> _contracts =
             new ConcurrentDictionary<Type, JsonTypeInfo?>();
+
+        /// <summary>
+        /// The exact set <see cref="TryWriteBuiltInScalar"/> handles - never widened without also
+        /// checking that its output still matches <c>JsonSerializer.Serialize</c> byte-for-byte, since
+        /// <see cref="CanFastPath"/> relies on that equivalence to skip the contract entirely.
+        /// </summary>
+        private static readonly HashSet<Type> BuiltInScalarTypes = new()
+        {
+            typeof(string), typeof(int), typeof(long), typeof(double), typeof(decimal), typeof(float),
+            typeof(byte), typeof(sbyte), typeof(short), typeof(ushort), typeof(uint), typeof(ulong),
+            typeof(char), typeof(Guid), typeof(DateTime), typeof(DateTimeOffset), typeof(TimeSpan),
+            typeof(Uri),
+#if NET
+            typeof(DateOnly), typeof(TimeOnly),
+#endif
+        };
 
         public ScalarJsonWriter(JsonSerializerOptions options)
         {
@@ -115,6 +137,15 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
         /// </remarks>
         private void WriteFirstValueOfType(Utf8JsonWriter writer, object value, Type type)
         {
+            if (CanFastPath(type))
+            {
+                _contracts[type] = null;
+
+                WriteWithoutReflection(writer, value);
+
+                return;
+            }
+
             JsonTypeInfo? contract = ResolveContract(type);
 
             if (contract == null)
@@ -156,6 +187,55 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.Helpers
         private static void WriteBooleanText(Utf8JsonWriter writer, bool value)
         {
             writer.WriteStringValue(value ? "true".AsSpan() : "false".AsSpan());
+        }
+
+        /// <summary>
+        /// Reports whether <paramref name="type"/> can skip contract resolution entirely - see the
+        /// class remarks for why each condition is required.
+        /// </summary>
+        private bool CanFastPath(Type type)
+        {
+            return BuiltInScalarTypes.Contains(type)
+                && _options.NumberHandling == JsonNumberHandling.Strict
+                && HasOnlyPlainDefaultResolver()
+                && !HasCustomConverter(type);
+        }
+
+        /// <summary>
+        /// Reports whether the resolver is either absent or exactly the stock
+        /// <see cref="DefaultJsonTypeInfoResolver"/> with nothing added to it. The exact-type check
+        /// matters because subclasses can override <see cref="IJsonTypeInfoResolver.GetTypeInfo"/>,
+        /// and even a plain resolver can rewrite contracts through modifiers.
+        /// </summary>
+        private bool HasOnlyPlainDefaultResolver()
+        {
+            return _options.TypeInfoResolver switch
+            {
+                null => true,
+                DefaultJsonTypeInfoResolver defaultResolver
+                    when defaultResolver.GetType() == typeof(DefaultJsonTypeInfoResolver) =>
+                    defaultResolver.Modifiers.Count == 0,
+                _ => false,
+            };
+        }
+
+        /// <summary>
+        /// Reports whether the caller registered a converter that would handle <paramref name="type"/>
+        /// itself, rather than through <see cref="JsonSerializerOptions.TypeInfoResolver"/>.
+        /// </summary>
+        private bool HasCustomConverter(Type type)
+        {
+            var converters = _options.Converters;
+
+            foreach (var converter in converters)
+            {
+                if (converter.CanConvert(type))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private JsonTypeInfo? ResolveContract(Type type)
