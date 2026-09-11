@@ -135,6 +135,59 @@ jobs:
         if: always()
         run: docker compose -f tests/integration/docker-compose.yml down -v
 
+  compatibility:
+    name: Compatibility smoke
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # The compatibility project executes .NET Framework targets on Windows and hosts the
+      # library's netstandard2.0 asset from a net8.0 test app. It stays out of the solution
+      # because global.json selects Microsoft.Testing.Platform for the normal dotnet test flow.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore tests/Scarlet.Serilog.Sinks.Graylog.Compatibility.Tests/Scarlet.Serilog.Sinks.Graylog.Compatibility.Tests.csproj
+
+      - name: Build
+        run: dotnet build tests/Scarlet.Serilog.Sinks.Graylog.Compatibility.Tests/Scarlet.Serilog.Sinks.Graylog.Compatibility.Tests.csproj -c Release --no-restore
+
+      - name: Test
+        shell: pwsh
+        run: |
+          $project = 'tests/Scarlet.Serilog.Sinks.Graylog.Compatibility.Tests'
+          $testAssembly = 'Scarlet.Serilog.Sinks.Graylog.Compatibility.Tests.dll'
+          $failed = $false
+
+          foreach ($framework in @('net462', 'net471', 'net8.0')) {
+            $output = "$project/bin/Release/$framework"
+            dotnet vstest "$output/$testAssembly" `
+              /TestAdapterPath:"$output" `
+              "/Logger:trx;LogFileName=compat-$framework.trx" `
+              /ResultsDirectory:TestResults/compatibility
+
+            if ($LASTEXITCODE -ne 0) {
+              $failed = $true
+            }
+          }
+
+          if ($failed) {
+            exit 1
+          }
+
+      - name: Upload compatibility test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: compatibility-test-results
+          path: TestResults/compatibility/*.trx
+          if-no-files-found: ignore
+
   aot:
     name: Native AOT
     runs-on: ubuntu-latest
