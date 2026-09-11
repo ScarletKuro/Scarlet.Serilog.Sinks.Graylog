@@ -233,10 +233,10 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests
             sink.Emit(LogEventSource.GetSimpleLogEvent(DateTimeOffset.UnixEpoch));
 
             CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-            var disposalStarted = new TaskCompletionSource<object?>();
+            var disposalStarted = new TaskCompletionSource();
             Task disposal = Task.Run(() =>
             {
-                disposalStarted.SetResult(null);
+                disposalStarted.SetResult();
                 sink.Dispose();
             }, cancellationToken);
 

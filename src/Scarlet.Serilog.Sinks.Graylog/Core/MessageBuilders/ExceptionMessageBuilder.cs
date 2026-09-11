@@ -53,21 +53,34 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
             fields.WriteField("_ExceptionSource", exception.Source);
             fields.WriteField("_ExceptionType", exception.GetType().FullName);
 
-            var messages = new StringBuilder();
-            var stackTraces = new StringBuilder();
+            // Separate cache slots: this call always has both builders outstanding together, and
+            // messages and stack traces settle at very different capacities.
+            StringBuilder messages = StringBuilderCache<MessagesSlot>.Acquire();
+            StringBuilder stackTraces = StringBuilderCache<StackTracesSlot>.Acquire();
 
             Flatten(exception, messages, stackTraces);
 
-            fields.WriteField("_ExceptionMessage", messages.ToString().Trim());
+            fields.WriteField("_ExceptionMessage", StringBuilderCache<MessagesSlot>.GetStringAndRelease(messages).Trim());
 
             if (stackTraces.Length > 0)
             {
-                fields.WriteField("_StackTrace", stackTraces.ToString().Trim());
+                fields.WriteField("_StackTrace", StringBuilderCache<StackTracesSlot>.GetStringAndRelease(stackTraces).Trim());
             }
             else
             {
+                StringBuilderCache<StackTracesSlot>.Release(stackTraces);
                 fields.WriteField("_StackTrace", null);
             }
+        }
+
+        // ReSharper disable once ClassNeverInstantiated.Local
+        private sealed class MessagesSlot
+        {
+        }
+
+        // ReSharper disable once ClassNeverInstantiated.Local
+        private sealed class StackTracesSlot
+        {
         }
 
         /// <summary>

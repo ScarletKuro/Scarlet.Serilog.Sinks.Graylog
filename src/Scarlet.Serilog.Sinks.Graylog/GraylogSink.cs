@@ -56,7 +56,7 @@ namespace Scarlet.Serilog.Sinks.Graylog
         /// Created only when disposal finds work in flight. The last reporting continuation completes
         /// it, letting disposal wait on one task regardless of how many sends are pending.
         /// </summary>
-        private TaskCompletionSource<object?>? _drained;
+        private TaskCompletionSource<DrainCompletion>? _drained;
 
         /// <summary>
         /// Non-zero once disposal has started. An <see cref="int"/> driven through
@@ -184,7 +184,7 @@ namespace Scarlet.Serilog.Sinks.Graylog
         {
             if (Interlocked.Decrement(ref _inFlightCount) == 0)
             {
-                Volatile.Read(ref _drained)?.TrySetResult(null);
+                Volatile.Read(ref _drained)?.TrySetResult(default);
             }
         }
 
@@ -329,7 +329,7 @@ namespace Scarlet.Serilog.Sinks.Graylog
                 return Task.CompletedTask;
             }
 
-            var drained = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var drained = new TaskCompletionSource<DrainCompletion>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             Volatile.Write(ref _drained, drained);
 
@@ -337,7 +337,7 @@ namespace Scarlet.Serilog.Sinks.Graylog
             // Rechecking after publication closes that missed-wakeup window.
             if (Volatile.Read(ref _inFlightCount) == 0)
             {
-                drained.TrySetResult(null);
+                drained.TrySetResult(default);
             }
 
             return drained.Task;
@@ -350,6 +350,10 @@ namespace Scarlet.Serilog.Sinks.Graylog
             {
                 _transport.Value.Dispose();
             }
+        }
+
+        private readonly struct DrainCompletion
+        {
         }
     }
 }

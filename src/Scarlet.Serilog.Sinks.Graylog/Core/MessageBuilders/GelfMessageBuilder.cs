@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 
 namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
@@ -261,11 +262,19 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
 
         private static string RenderPropertyValue(LogEventPropertyValue value)
         {
-            using TextWriter writer = new StringWriter();
+            StringBuilder builder = StringBuilderCache<PropertyValueSlot>.Acquire();
 
-            value.Render(writer);
+            using (TextWriter writer = new StringWriter(builder))
+            {
+                value.Render(writer);
+            }
 
-            return writer.ToString()!.Trim('"');
+            return StringBuilderCache<PropertyValueSlot>.GetStringAndRelease(builder).Trim('"');
+        }
+
+        // ReSharper disable once ClassNeverInstantiated.Local
+        private sealed class PropertyValueSlot
+        {
         }
     }
 }
