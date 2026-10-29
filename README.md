@@ -221,6 +221,23 @@ transport.
 TCP re-resolves on every reconnect, and HTTP on `Http.ConnectionLifetime` — see
 [HTTP timeouts and connection reuse](#http-timeouts-and-connection-reuse).
 
+## TCP idle connections
+
+The TCP transport keeps one connection open and reuses it. A failed write closes it, and the next
+send reconnects; the event that hit the failure is not retried. If a firewall or load balancer between the
+application and Graylog drops connections that sit idle, the first events after a quiet period can
+be lost: a reset costs one event, while a silent drop goes unnoticed until the OS gives up
+retransmitting (seconds on Windows, around 15 minutes on Linux by default), and everything written
+in between is lost.
+
+`Tcp.EnableKeepAlive` is on by default, but the OS waits 2 hours before the first keep-alive probe,
+which is longer than most idle timeouts. Lower it below the device's idle timeout and the probes keep
+the connection alive:
+
+- Linux: `sysctl -w net.ipv4.tcp_keepalive_time=60`
+- Windows: set `KeepAliveTime` (milliseconds, `DWORD`) under
+  `HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters` and reboot.
+
 ## GELF field names and values
 
 Serilog property names become GELF additional fields. GELF requires each one to carry a leading `_`
