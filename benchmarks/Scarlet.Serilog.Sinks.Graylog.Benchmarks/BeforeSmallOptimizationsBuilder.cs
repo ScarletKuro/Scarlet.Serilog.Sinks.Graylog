@@ -1,0 +1,287 @@
+using Serilog.Events;
+using Serilog.Parsing;
+using Scarlet.Serilog.Sinks.Graylog.Core.Extensions;
+using Scarlet.Serilog.Sinks.Graylog.Core.Helpers;
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Text;
+using System.Text.Json;
+
+namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
+{
+    /// <summary>
+    /// Frozen copy of GelfMessageBuilder from commit 152eb0a, before the literal-message
+    /// and lazy template-property exclusion optimizations. Keep this baseline unchanged.
+    /// </summary>
+    internal class BeforeSmallOptimizationsBuilder
+    {
+        private const string DefaultGelfVersion = "1.1";
+        private const string StringLevel = "_stringLevel";
+        private const string Facility = "_facility";
+
+        private static readonly JsonEncodedText VersionFieldName = JsonEncodedText.Encode("version");
+        private static readonly JsonEncodedText HostFieldName = JsonEncodedText.Encode("host");
+        private static readonly JsonEncodedText ShortMessageFieldName = JsonEncodedText.Encode("short_message");
+        private static readonly JsonEncodedText TimestampFieldName = JsonEncodedText.Encode("timestamp");
+        private static readonly JsonEncodedText LevelFieldName = JsonEncodedText.Encode("level");
+        private static readonly JsonEncodedText FullMessageFieldName = JsonEncodedText.Encode("full_message");
+
+        private readonly string _hostName;
+
+        /// <summary>
+        /// Writes scalar field values, built once from the serializer options this builder was created
+        /// with.
+        /// </summary>
+        /// <remarks>
+        /// A sink supplies the serializer-options snapshot it captured at construction, so its writer
+        /// configuration and both of its lazy message builders always agree. A builder constructed
+        /// directly takes its own snapshot here instead.
+        /// </remarks>
+        private readonly ScalarJsonWriter _scalarJsonWriter;
+
+        /// <summary>Gets the GELF payload options this builder was created with.</summary>
+        protected GelfOptions Options { get; }
+
+        /// <summary>Initializes a GELF message builder.</summary>
+        /// <exception cref="ArgumentNullException"><paramref name="options"/> is <c>null</c>.</exception>
+        internal BeforeSmallOptimizationsBuilder(string hostName, GelfOptions options)
+            : this(hostName, options, GetSerializerOptions(options))
+        {
+        }
+
+        internal BeforeSmallOptimizationsBuilder(
+            string hostName,
+            GelfOptions options,
+            JsonSerializerOptions serializerOptions)
+        {
+            if (options == null)
+            {
+                throw new ArgumentNullException(nameof(options));
+            }
+
+            if (serializerOptions == null)
+            {
+                throw new ArgumentNullException(nameof(serializerOptions));
+            }
+
+            _hostName = hostName;
+            Options = options;
+            _scalarJsonWriter = new ScalarJsonWriter(serializerOptions);
+        }
+
+        private static JsonSerializerOptions GetSerializerOptions(GelfOptions options)
+        {
+            if (options == null)
+            {
+                throw new ArgumentNullException(nameof(options));
+            }
+
+            return options.JsonSerializerOptions;
+        }
+
+        /// <inheritdoc />
+        public void Build(LogEvent logEvent, Utf8JsonWriter writer)
+        {
+            if (logEvent == null)
+            {
+                throw new ArgumentNullException(nameof(logEvent));
+            }
+
+            if (writer == null)
+            {
+                throw new ArgumentNullException(nameof(writer));
+            }
+
+            // Every event writes _stringLevel; reserve the optional top-level fields as well as the
+            // properties so the duplicate-name set does not repeatedly grow on larger events.
+            int expectedFieldCount = logEvent.Properties.Count + 1 + ExtraFieldCount;
+
+            if (Options.Facility != null)
+            {
+                expectedFieldCount++;
+            }
+
+            if (Options.IncludeMessageTemplate)
+            {
+                expectedFieldCount++;
+            }
+
+            var fields = new GelfFieldWriter(writer, _scalarJsonWriter, expectedFieldCount);
+
+            writer.WriteStartObject();
+            WriteCoreFields(logEvent, fields);
+            WriteExtraFields(logEvent, fields);
+            WriteProperties(logEvent, fields);
+            writer.WriteEndObject();
+        }
+
+        /// <summary>Adds fields supplied by a specialized builder.</summary>
+        protected virtual void WriteExtraFields(LogEvent logEvent, GelfFieldWriter fields)
+        {
+        }
+
+        /// <summary>Number of additional fields <see cref="WriteExtraFields"/> writes.</summary>
+        protected virtual int ExtraFieldCount => 0;
+
+        private void WriteCoreFields(LogEvent logEvent, GelfFieldWriter fields)
+        {
+            Utf8JsonWriter writer = fields.Writer;
+            string rendered = logEvent.RenderMessage();
+            int shortLength = Math.Min(rendered.Length, Options.ShortMessageMaxLength);
+
+            writer.WriteString(VersionFieldName, DefaultGelfVersion);
+            writer.WriteString(HostFieldName, Options.HostnameOverride ?? _hostName);
+            writer.WriteString(ShortMessageFieldName, rendered.AsSpan(0, shortLength));
+            writer.WriteNumber(TimestampFieldName, logEvent.Timestamp.ConvertToNix());
+            writer.WriteNumber(LevelFieldName, LogLevelMapper.GetMappedLevel(logEvent.Level));
+
+            if (fields.BeginField(StringLevel))
+            {
+                writer.WriteStringValue(LogLevelMapper.GetLevelName(logEvent.Level));
+            }
+
+            if (Options.Facility != null && fields.BeginField(Facility))
+            {
+                writer.WriteStringValue(Options.Facility);
+            }
+
+            if (rendered.Length > Options.ShortMessageMaxLength)
+            {
+                writer.WriteString(FullMessageFieldName, rendered);
+            }
+        }
+
+        private void WriteProperties(LogEvent logEvent, GelfFieldWriter fields)
+        {
+            HashSet<string>? templateProperties = null;
+
+            if (Options.ExcludeMessageTemplateProperties)
+            {
+                templateProperties = new HashSet<string>(StringComparer.Ordinal);
+
+                foreach (MessageTemplateToken token in logEvent.MessageTemplate.Tokens)
+                {
+                    if (token is PropertyToken propertyToken)
+                    {
+                        templateProperties.Add(propertyToken.PropertyName);
+                    }
+                }
+            }
+
+            foreach (KeyValuePair<string, LogEventPropertyValue> property in logEvent.Properties)
+            {
+                if (templateProperties?.Contains(property.Key) == true)
+                {
+                    continue;
+                }
+
+                WriteAdditionalField(fields, property.Key, property.Value);
+            }
+
+            if (Options.IncludeMessageTemplate)
+            {
+                fields.WriteField(Options.MessageTemplateFieldName, logEvent.MessageTemplate.Text);
+            }
+        }
+
+        private void WriteAdditionalField(
+            GelfFieldWriter fields,
+            string name,
+            LogEventPropertyValue value,
+            string memberPath = "")
+        {
+            string key = memberPath.Length == 0 ? name : $"{memberPath}.{name}";
+
+            switch (value)
+            {
+                case ScalarValue scalarValue:
+                    if (fields.BeginField(key))
+                    {
+                        if (scalarValue.Value == null)
+                        {
+                            fields.Writer.WriteNullValue();
+                        }
+                        else
+                        {
+                            fields.Scalars.WriteValue(fields.Writer, scalarValue.Value);
+                        }
+                    }
+
+                    break;
+                case SequenceValue sequenceValue:
+                    fields.WriteField(key, RenderPropertyValue(sequenceValue));
+
+                    if (Options.ParseArrayValues)
+                    {
+                        int index = 0;
+
+                        foreach (LogEventPropertyValue element in sequenceValue.Elements)
+                        {
+                            WriteAdditionalField(fields, index.ToString(CultureInfo.InvariantCulture), element, key);
+                            index++;
+                        }
+                    }
+
+                    break;
+                case StructureValue structureValue:
+                    foreach (LogEventProperty property in structureValue.Properties)
+                    {
+                        WriteAdditionalField(fields, property.Name, property.Value, key);
+                    }
+
+                    break;
+                case DictionaryValue dictionaryValue:
+                    WriteDictionary(fields, key, dictionaryValue);
+
+                    break;
+            }
+        }
+
+        private void WriteDictionary(GelfFieldWriter fields, string key, DictionaryValue dictionaryValue)
+        {
+            if (Options.ParseArrayValues)
+            {
+                foreach (KeyValuePair<ScalarValue, LogEventPropertyValue> element in dictionaryValue.Elements)
+                {
+                    WriteAdditionalField(fields, RenderPropertyValue(element.Key), element.Value, key);
+                }
+
+                return;
+            }
+
+            if (!fields.BeginField(key))
+            {
+                return;
+            }
+
+            fields.Writer.WriteStartObject();
+
+            foreach (KeyValuePair<ScalarValue, LogEventPropertyValue> element in dictionaryValue.Elements)
+            {
+                fields.Writer.WriteString(RenderPropertyValue(element.Key), RenderPropertyValue(element.Value));
+            }
+
+            fields.Writer.WriteEndObject();
+        }
+
+        private static string RenderPropertyValue(LogEventPropertyValue value)
+        {
+            StringBuilder builder = StringBuilderCache<PropertyValueSlot>.Acquire();
+
+            using (TextWriter writer = new StringWriter(builder))
+            {
+                value.Render(writer);
+            }
+
+            return StringBuilderCache<PropertyValueSlot>.GetStringAndRelease(builder).Trim('"');
+        }
+
+        // ReSharper disable once ClassNeverInstantiated.Local
+        private sealed class PropertyValueSlot
+        {
+        }
+    }
+}
+

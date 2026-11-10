@@ -11,6 +11,58 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.MessageBuilders
 {
     public class GelfMessageBuilderFixture
     {
+        [Theory]
+        [InlineData("plain message", "plain message")]
+        [InlineData("{{Name}}", "{Name}")]
+        [InlineData("", "")]
+        [InlineData("Hello {Name}", "Hello \"Alice\"")]
+        [InlineData("Hello {Name:l}", "Hello Alice")]
+        public void Build_PreservesRenderedMessage(string template, string expected)
+        {
+            var logEvent = new LogEvent(DateTimeOffset.UnixEpoch, LogEventLevel.Information, null,
+                new MessageTemplateParser().Parse(template),
+                new[] { new LogEventProperty("Name", new ScalarValue("Alice")) });
+            var builder = new GelfMessageBuilder("localhost", new GelfOptions());
+
+            Assert.Equal(expected, builder.Build(logEvent).Text("short_message"));
+        }
+
+        [Theory]
+        [InlineData("plain message", true, true)]
+        [InlineData("{{Name}}", true, true)]
+        [InlineData("Hello {Name} {Name}", true, false)]
+        [InlineData("Hello {Name}", false, true)]
+        public void Build_ExcludesOnlyTemplateProperties(string template, bool exclude, bool includesName)
+        {
+            var logEvent = new LogEvent(DateTimeOffset.UnixEpoch, LogEventLevel.Information, null,
+                new MessageTemplateParser().Parse(template),
+                new[]
+                {
+                    new LogEventProperty("Name", new ScalarValue("Alice")),
+                    new LogEventProperty("Context", new ScalarValue("kept"))
+                });
+            var builder = new GelfMessageBuilder("localhost",
+                new GelfOptions { ExcludeMessageTemplateProperties = exclude });
+
+            var actual = builder.Build(logEvent);
+
+            Assert.Equal(includesName, actual.ContainsKey("_Name"));
+            Assert.Equal("kept", actual.Text("_Context"));
+        }
+
+        [Theory]
+        [InlineData("plain message")]
+        [InlineData("Hello {Missing}")]
+        public void Build_WithExclusionAndNoProperties_PreservesRenderedMessage(string template)
+        {
+            var logEvent = new LogEvent(DateTimeOffset.UnixEpoch, LogEventLevel.Information, null,
+                new MessageTemplateParser().Parse(template), Array.Empty<LogEventProperty>());
+            var builder = new GelfMessageBuilder("localhost",
+                new GelfOptions { ExcludeMessageTemplateProperties = true });
+
+            Assert.Equal(logEvent.RenderMessage(), builder.Build(logEvent).Text("short_message"));
+        }
+
         [Fact]
         public void Constructor_WithoutOptions_Throws()
         {

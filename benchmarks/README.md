@@ -1,5 +1,16 @@
 # Performance benchmarks
 
+The small-optimization comparison measures the production message builder against a frozen copy
+from commit `152eb0a`, before literal-message rendering and template-property exclusion were optimized:
+
+```powershell
+dotnet run -c Release --project benchmarks/Scarlet.Serilog.Sinks.Graylog.Benchmarks -- --filter "*SmallOptimizations*" --job short --warmupCount 3 --iterationCount 5 --launchCount 1
+```
+
+It covers plain literals, literals with enriched properties, parameterized messages, and missing
+properties, with template-property exclusion enabled where the scenario ends in `Excluded`.
+These measurements cover JSON message building and buffer allocation, excluding transport and compression.
+
 Run the message-building allocation and throughput comparison in Release mode:
 
 ```powershell

@@ -125,7 +125,11 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
         private void WriteCoreFields(LogEvent logEvent, GelfFieldWriter fields)
         {
             Utf8JsonWriter writer = fields.Writer;
-            string rendered = logEvent.RenderMessage();
+            // The parser has already unescaped literal braces in the text token.
+            string rendered = logEvent.MessageTemplate.Tokens is IReadOnlyList<MessageTemplateToken> { Count: 1 } tokens
+                && tokens[0] is TextToken textToken
+                    ? textToken.Text
+                    : logEvent.RenderMessage();
             int shortLength = Math.Min(rendered.Length, Options.ShortMessageMaxLength);
 
             writer.WriteString(VersionFieldName, DefaultGelfVersion);
@@ -154,14 +158,13 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
         {
             HashSet<string>? templateProperties = null;
 
-            if (Options.ExcludeMessageTemplateProperties)
+            if (Options.ExcludeMessageTemplateProperties && logEvent.Properties.Count > 0)
             {
-                templateProperties = new HashSet<string>(StringComparer.Ordinal);
-
                 foreach (MessageTemplateToken token in logEvent.MessageTemplate.Tokens)
                 {
                     if (token is PropertyToken propertyToken)
                     {
+                        templateProperties ??= new HashSet<string>(StringComparer.Ordinal);
                         templateProperties.Add(propertyToken.PropertyName);
                     }
                 }
