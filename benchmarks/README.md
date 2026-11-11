@@ -1,7 +1,9 @@
 # Performance benchmarks
 
 The small-optimization comparison measures the production message builder against a frozen copy
-from commit `152eb0a`, before literal-message rendering and template-property exclusion were optimized:
+from commit `152eb0a`, before literal-message rendering and template-property exclusion were optimized.
+The copy shares the production field and scalar writers, so it isolates the builder changes only.
+Setup fails if the two builders produce different payload bytes:
 
 ```powershell
 dotnet run -c Release --project benchmarks/Scarlet.Serilog.Sinks.Graylog.Benchmarks -- --filter "*SmallOptimizations*" --job short --warmupCount 3 --iterationCount 5 --launchCount 1

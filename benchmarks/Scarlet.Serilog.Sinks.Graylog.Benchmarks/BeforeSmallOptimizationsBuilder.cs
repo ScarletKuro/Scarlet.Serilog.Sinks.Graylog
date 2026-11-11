@@ -15,6 +15,11 @@ namespace Scarlet.Serilog.Sinks.Graylog.Core.MessageBuilders
     /// Frozen copy of GelfMessageBuilder from commit 152eb0a, before the literal-message
     /// and lazy template-property exclusion optimizations. Keep this baseline unchanged.
     /// </summary>
+    /// <remarks>
+    /// Only the builder itself is frozen: it still writes through the production
+    /// <see cref="GelfFieldWriter"/> and <see cref="ScalarJsonWriter"/>, so later changes to those
+    /// helpers move both sides of the comparison together.
+    /// </remarks>
     internal class BeforeSmallOptimizationsBuilder
     {
         private const string DefaultGelfVersion = "1.1";

@@ -36,8 +36,19 @@ public class SmallOptimizationsBenchmarks
             new MessageTemplateParser().Parse(parameterized || missing
                 ? "Processed request for {Name}"
                 : "Representative benchmark event"), properties);
-        if (BuildBefore() != BuildAfter())
-            throw new InvalidOperationException("Payload lengths differ.");
+        if (!Payload(_before.Build).AsSpan().SequenceEqual(Payload(_after.Build)))
+            throw new InvalidOperationException("Payloads differ.");
+    }
+
+    private byte[] Payload(Action<LogEvent, Utf8JsonWriter> build)
+    {
+        var buffer = new ByteBufferWriter();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            build(_event, writer);
+        }
+
+        return buffer.WrittenSpan.ToArray();
     }
 
     [Benchmark(Baseline = true)]
