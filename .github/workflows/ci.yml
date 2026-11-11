@@ -23,15 +23,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # 8.0.x/10.0.x provide the runtimes the test projects target. The 10.0.x
-      # SDK also builds the library's net9.0 and .NET Framework targets via targeting
-      # packs, and is new enough to read the .slnx solution format.
+      # 8.0.x/10.0.x/11.0.x provide the runtimes the test projects target. The newest
+      # SDK, 11.0.x, builds everything - including the library's net9.0 and .NET Framework
+      # targets via targeting packs - and reads the .slnx solution format.
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: |
             8.0.x
             10.0.x
+            11.0.x
 
       - name: Restore
         run: dotnet restore ${{ env.SOLUTION }}
@@ -100,12 +101,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # The test project targets net8.0 and net10.0; one framework is enough to prove Graylog accepts
-      # what the sink sends, and these tests are slow enough not to want twice.
+      # The test project targets net8.0, net10.0 and net11.0; one framework is enough to prove Graylog accepts
+      # what the sink sends, and these tests are slow enough not to want twice. Restoring the project
+      # evaluates every target, so the SDK has to be new enough for the newest one anyway.
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: 11.0.x
 
       # Not a service container: Graylog needs MongoDB and OpenSearch up and healthy before it will
       # start, and only compose can express that ordering. --wait blocks on the healthchecks, so the
@@ -123,7 +125,7 @@ jobs:
           GRAYLOG_REQUIRED: 'true'
         run: >
           dotnet test tests/Scarlet.Serilog.Sinks.Graylog.Tests/Scarlet.Serilog.Sinks.Graylog.Tests.csproj
-          -c Release -f net10.0 --
+          -c Release -f net11.0 --
           --filter-trait "Category=Integration"
           --minimum-expected-tests 12
 

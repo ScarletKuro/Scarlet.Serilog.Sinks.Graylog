@@ -34,12 +34,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Tcp
             using var target = new TrustingTcpTransportClient(TlsOptionsFor(server.Port), Dns());
             using CancellationTokenSource timeout = Timeout();
 
-            Task<TlsSession> accepting = server.AcceptAsync(timeout.Token);
+            Task<TlsLoopbackSession> accepting = server.AcceptAsync(timeout.Token);
             byte[] payload = { 1, 2, 3, 0 };
 
             await target.Send(payload);
 
-            TlsSession session = await accepting;
+            TlsLoopbackSession session = await accepting;
 
             Assert.Equal(payload, await session.ReadExactlyAsync(payload.Length, timeout.Token));
             Assert.Equal(1, target.ValidationCalls);
@@ -72,7 +72,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Tcp
 
             try
             {
-                Task<TlsSession> accepting = server.AcceptAsync(timeout.Token);
+                Task<TlsLoopbackSession> accepting = server.AcceptAsync(timeout.Token);
 
                 await target.Send(new byte[] { 1, 0 });
                 await accepting;
@@ -100,12 +100,12 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Tcp
             using var target = new TrustingTcpTransportClient(options, Dns());
             using CancellationTokenSource timeout = Timeout();
 
-            Task<TlsSession> accepting = server.AcceptAsync(timeout.Token);
+            Task<TlsLoopbackSession> accepting = server.AcceptAsync(timeout.Token);
             byte[] payload = { 9, 0 };
 
             await target.Send(payload);
 
-            TlsSession session = await accepting;
+            TlsLoopbackSession session = await accepting;
 
             Assert.Equal(payload, await session.ReadExactlyAsync(payload.Length, timeout.Token));
         }
@@ -124,7 +124,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Tcp
             using var target = new TrustingTcpTransportClient(options, Dns());
             using CancellationTokenSource timeout = Timeout();
 
-            Task<TlsSession> accepting = server.AcceptAsync(timeout.Token);
+            Task<TlsLoopbackSession> accepting = server.AcceptAsync(timeout.Token);
 
             await target.Send(new byte[] { 1, 0 });
 
@@ -147,7 +147,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Tcp
             using var target = new TrustingTcpTransportClient(options, Dns());
             using CancellationTokenSource timeout = Timeout();
 
-            Task<TlsSession> accepting = server.AcceptAsync(timeout.Token);
+            Task<TlsLoopbackSession> accepting = server.AcceptAsync(timeout.Token);
 
             await target.Send(new byte[] { 1, 0 });
 
@@ -174,7 +174,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Tcp
                 options.Tls!.ClientCertificate = clientCertificate;
 
                 using var target = new TrustingTcpTransportClient(options, Dns());
-                Task<TlsSession> accepting = first.AcceptAsync(timeout.Token);
+                Task<TlsLoopbackSession> accepting = first.AcceptAsync(timeout.Token);
 
                 await target.Send(new byte[] { 1, 0 });
                 await accepting;
@@ -188,7 +188,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Tcp
             reused.Tls!.ClientCertificate = clientCertificate;
 
             using var reconnected = new TrustingTcpTransportClient(reused, Dns());
-            Task<TlsSession> reaccepting = second.AcceptAsync(timeout.Token);
+            Task<TlsLoopbackSession> reaccepting = second.AcceptAsync(timeout.Token);
 
             await reconnected.Send(new byte[] { 2, 0 });
 
@@ -228,7 +228,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Core.Transport.Tcp
             using var target = new TcpTransportClient(TlsOptionsFor(server.Port), Dns());
             using CancellationTokenSource timeout = Timeout();
 
-            Task<TlsSession> accepting = server.AcceptAsync(timeout.Token);
+            Task<TlsLoopbackSession> accepting = server.AcceptAsync(timeout.Token);
 
             await Assert.ThrowsAnyAsync<AuthenticationException>(() => target.Send(new byte[] { 1, 0 }));
 

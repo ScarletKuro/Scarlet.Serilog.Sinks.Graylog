@@ -67,7 +67,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Fakes
         /// to be in flight at the same time. It faults when the client rejects the certificate, so a
         /// rejection test should await it to observe that failure.
         /// </remarks>
-        public async Task<TlsSession> AcceptAsync(CancellationToken cancellationToken)
+        public async Task<TlsLoopbackSession> AcceptAsync(CancellationToken cancellationToken)
         {
             TcpClient client = await _listener.AcceptTcpClientAsync(cancellationToken);
             _accepted.Add(client);
@@ -86,7 +86,7 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Fakes
                 RemoteCertificateValidationCallback = (_, _, _, _) => true
             }, cancellationToken);
 
-            return new TlsSession(stream);
+            return new TlsLoopbackSession(stream);
         }
 
         public void Dispose()
@@ -111,11 +111,11 @@ namespace Scarlet.Serilog.Sinks.Graylog.Tests.Fakes
     /// <summary>
     /// One accepted TLS connection.
     /// </summary>
-    internal sealed class TlsSession
+    internal sealed class TlsLoopbackSession
     {
         private readonly SslStream _stream;
 
-        public TlsSession(SslStream stream)
+        public TlsLoopbackSession(SslStream stream)
         {
             _stream = stream;
         }
